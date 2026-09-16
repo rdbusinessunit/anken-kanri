@@ -39,9 +39,6 @@ const OPT = {
   facilities: ['更衣室', '食堂', '休憩室', 'ロッカー', '自動販売機', '電子レンジ', '冷蔵庫', 'ポット', '駐車場', '喫煙所'],
   uniform: ['作業服上', '作業服下', '作業帽子', 'ヘルメット', '安全靴', '保護具'],
   rd: ['未着手', '作成中', '掲載中', '修正中', '停止'],
-  temp: ['暑い', '寒い', '普通', '空調完備'],
-  weight: ['重い', '普通', '軽い'],
-  clean: ['きれい', '普通', '汚い'],
 };
 // 勤務形態ごとの勤務時間欄。入社直後は日勤で教育することが多いので、日勤以外は＋1欄
 const SHIFT_PRESET = { '日勤': ['日勤'], '夜勤': ['日勤（教育）', '夜勤'], '2交替': ['日勤（教育）', '1直', '2直'], '3交替': ['日勤（教育）', '1直', '2直', '3直'], '変則': ['日勤（教育）', 'シフト①', 'シフト②', 'シフト③'] };
@@ -277,7 +274,7 @@ function newCase() {
     facilities: { checks: [], shokudoNote: '', otherNote: '' },
     setsumei: { officeTanto: '', uniform: [], training: 'キャリア形成支援に基づくe-ラーニング制度', notes: '' },
     kengaku: {},
-    merit: { temp: '', tempC: '', tempNote: '', weight: '', weightKg: '', weightNote: '', clean: '', age: '', cleanNote: '', notes: '' },
+    merit: { notes: '' },
     aliases: [], adCodes: [],
     market: { wage: '', note: '' },
     flow: { area1: { done: false, at: '', by: '' }, ringi: { state: '未上申', submittedAt: '', decidedAt: '', approvals: {}, changedAfterApproval: false }, area3: { done: false, at: '', by: '' }, rd: { state: '未着手', tanto: '' }, closed: false },
@@ -299,18 +296,20 @@ function normalizeCase(c) {
     return np;
   });
   out.kengaku = { ...(c.kengaku || {}) };
-  out.merit = { ...d.merit, ...(c.merit || {}) };
-  if (!c.merit) {
-    // 旧データ：現場実態の暑さ・重さ・見た目と「何の部品か」を新しい欄へ移す
-    const kg = out.kengaku, j = k => [kg[k], kg[k + '_n']].filter(Boolean).join('／');
-    if (kg.q13) { out.merit.tempNote = j('q13'); const t = OPT.temp.find(x => String(kg.q13).startsWith(x)); if (t) out.merit.temp = t; }
-    if (kg.q22) out.merit.weightNote = j('q22');
-    if (kg.q03) out.merit.cleanNote = j('q03');
-    if (kg.q05 && out.positions.every(p => !p.product)) out.positions.forEach(p => { p.product = kg.q05; });
-  }
-  const om = c.merit || {};
-  if (!out.merit.notes && (om.bento || om.parking)) {
-    out.merit.notes = [om.bento === '無料配布あり' ? 'お弁当の無料配布あり' : '', om.parking ? `駐車場から工場まで${om.parking}${filled(om.parkingMin) ? `（約${om.parkingMin}分）` : ''}${om.parkingNote ? '　' + om.parkingNote : ''}` : ''].filter(Boolean).join('\n');
+  const om = c.merit || {}; const kg = out.kengaku;
+  out.merit = { notes: om.notes || '' };
+  if (!c.merit && kg.q05 && out.positions.every(p => !p.product)) out.positions.forEach(p => { p.product = kg.q05; });
+  if (!out.merit.notes) {
+    // 旧データ（暑さ・重さ・きれいさ・お弁当・駐車場・現場実態の該当項目）を特記事項にまとめる
+    const j = k => [kg[k], kg[k + '_n']].filter(Boolean).join('／');
+    const un = (v, pre, post) => filled(v) ? `${pre}${v}${post}` : '';
+    out.merit.notes = [
+      [om.temp, un(om.tempC, '（約', '℃）'), om.tempNote || j('q13')].filter(Boolean).join(''),
+      [om.weight, un(om.weightKg, '（約', 'kg）'), om.weightNote || j('q22')].filter(Boolean).join(''),
+      [om.clean, un(om.age, '（築', '年）'), om.cleanNote || j('q03')].filter(Boolean).join(''),
+      om.bento === '無料配布あり' ? 'お弁当の無料配布あり' : '',
+      om.parking ? `駐車場から工場まで${om.parking}${un(om.parkingMin, '（約', '分）')}${om.parkingNote || ''}` : '',
+    ].filter(Boolean).join('\n');
   }
   out.aliases = c.aliases || []; out.adCodes = c.adCodes || []; out.history = c.history || [];
   return out;
@@ -322,16 +321,8 @@ function detailText(p) {
   return parts.length === 1 && !p.product && !p.task ? String(p.detail) : parts.join('\n');
 }
 const detailLen = p => [p.product, p.task, p.detail].map(x => String(x || '').trim()).join('').length;
-function meritLines(c, positiveOnly) {
-  const m = c.merit || {}; const L = [];
-  const add = (ok, s) => { if (!positiveOnly || ok) L.push(s); };
-  const n = (v, pre, post) => filled(v) ? `（${pre}${v}${post}）` : '';
-  const note = v => v ? `　${v}` : '';
-  if (m.temp) add(m.temp === '空調完備' || m.temp === '普通', `暑さ・寒さ：${m.temp}${n(m.tempC, '', '℃くらい')}${positiveOnly ? '' : note(m.tempNote)}`);
-  if (m.weight) add(m.weight === '軽い', `重さ：${m.weight}${n(m.weightKg, '', 'kgくらい')}${positiveOnly ? '' : note(m.weightNote)}`);
-  if (m.clean) add(m.clean === 'きれい', `職場のきれいさ：${m.clean}${n(m.age, '築', '年くらい')}${positiveOnly ? '' : note(m.cleanNote)}`);
-  String(m.notes || '').split('\n').map(x => x.trim()).filter(Boolean).forEach(x => L.push(x));
-  return L;
+function meritLines(c) {
+  return String((c.merit || {}).notes || '').split('\n').map(x => x.trim()).filter(Boolean);
 }
 // 勤務形態に合わせて勤務時間欄の数と名称をそろえる（入力済みの欄は消さない）
 function syncShifts(p) {
@@ -380,7 +371,7 @@ const kengakuCount = c => KENGAKU.filter(q => filled(c.kengaku[q[1]])).length;
 const REQ = {
   a1: {
     title: '① 簡易求人',
-    c: [['kyoten', '拠点'], ['tanto', '営業担当'], ['company.name', '取引先企業名'], ['company.plant', '就業先事業所'], ['company.address', '就業先住所'], ['work.holidays', '休日'], ['merit.temp', '暑さ・寒さ'], ['merit.weight', '重さ'], ['merit.clean', 'きれいさ']],
+    c: [['kyoten', '拠点'], ['tanto', '営業担当'], ['company.name', '取引先企業名'], ['company.plant', '就業先事業所'], ['company.address', '就業先住所'], ['work.holidays', '休日']],
     p: [['name', '職種'], ['headcount', '募集人数'], ['bill', '請求単価'], ['pay', '時給'], ['product', '完成品・用途'], ['task', '作業内容']], shifts: true,
   },
   a2: {

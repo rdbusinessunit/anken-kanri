@@ -80,7 +80,7 @@ function refreshLive() {
     else if (k === 'kgc') el.textContent = `${kengakuCount(S.draft)}/${KENGAKU.length}項目`;
   });
   refreshFlow(); renderSavebar();
-  const h1 = $('.casehead h1'); if (h1 && parseRoute().view === 'new') h1.innerHTML = `${esc(S.draft.company.name || '新しい案件')}${S.draft.company.plant ? `<small>${esc(S.draft.company.plant)}</small>` : ''}`;
+  const h1 = $('.casehead h1'); if (h1 && parseRoute().view === 'new') h1.innerHTML = `${esc(S.draft.company.name || '新規案件')}${S.draft.company.plant ? `<small>${esc(S.draft.company.plant)}</small>` : ''}`;
 }
 function needsReason() {
   if (!S.draftId || S.draftId === 'new') return false;
@@ -93,7 +93,7 @@ function renderSavebar() {
   const nr = needsReason();
   if (bar.hidden || bar.dataset.nr !== String(nr)) {
     bar.dataset.nr = String(nr);
-    bar.innerHTML = `<span>${S.draftId === 'new' ? '新しい案件は未保存です' : '未保存の変更があります'}</span>${nr ? `<input type="text" id="reason" placeholder="変更理由（既存案件の変更は必須）" value="${esc(S.reason)}" aria-label="変更理由">` : ''}<button class="btn sm" data-act="discard">取り消す</button><button class="btn sm primary" data-act="save">${S.draftId === 'new' ? '受注登録する' : '保存する'}</button>`;
+    bar.innerHTML = `<span>${S.draftId === 'new' ? '新規案件は未保存です' : '未保存の変更があります'}</span>${nr ? `<input type="text" id="reason" placeholder="変更理由（既存案件の変更は必須）" value="${esc(S.reason)}" aria-label="変更理由">` : ''}<button class="btn sm" data-act="discard">取り消す</button><button class="btn sm primary" data-act="save">${S.draftId === 'new' ? '受注登録する' : '保存する'}</button>`;
   }
   bar.hidden = false;
 }

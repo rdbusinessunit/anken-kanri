@@ -123,7 +123,7 @@ function viewCase(r) {
   <div class="casehead">
     <div style="min-width:0;flex:1">
       <div class="eyebrow">${isNew ? '新規受注' : esc(c.kyoten || '拠点未設定') + ' ・ ' + esc(k.corp) + ' ' + esc(k.office)}</div>
-      <h1>${esc(c.company.name || '新しい案件')}${c.company.plant ? `<small>${esc(c.company.plant)}</small>` : ''}</h1>
+      <h1>${esc(c.company.name || '新規案件')}${c.company.plant ? `<small>${esc(c.company.plant)}</small>` : ''}</h1>
       <div class="row small muted" style="margin-top:4px">${isNew ? '' : chip(s.label, s.tone)}<span>営業担当 ${esc(c.tanto || '—')}</span><span>受注 ${fmtD(c.juchuDate)}</span>${c.legacy ? chip('導入前の既存案件') : ''}</div>
     </div>
     ${isNew ? '' : `<div class="row"><a class="btn" href="#/doc/${c.id}/ringi">帳票を見る</a><a class="btn" href="#/postings?case=${c.id}">求人管理</a></div>`}
@@ -236,13 +236,7 @@ function jobFields(i, p, detailed) {
   ].join('');
 }
 function meritFields() {
-  const row = (seg, num, note) => `<div class="merit">${seg}${num}${note}</div>`;
-  return [
-    row(fld('merit.temp', '暑いのか、寒いのか', 'seg', { req: true, miss: '暑さ・寒さ', options: OPT.temp }), fld('merit.tempC', '何度ぐらいか', 'num', { unit: '℃' }), fld('merit.tempNote', '対策・補足', 'text', { ph: '例：スポットクーラー・空調服の貸出あり' })),
-    row(fld('merit.weight', '重いのか、軽いのか', 'seg', { req: true, miss: '重さ', options: OPT.weight }), fld('merit.weightKg', '何キロくらいか', 'num', { unit: 'kg' }), fld('merit.weightNote', '対策・補足', 'text', { ph: '例：重い物はクレーンで運ぶ' })),
-    row(fld('merit.clean', 'きれいなのか、汚いのか', 'seg', { req: true, miss: 'きれいさ', options: OPT.clean }), fld('merit.age', '築何年ぐらいか', 'num', { unit: '年' }), fld('merit.cleanNote', '補足', 'text', { ph: '例：古いが清掃が行き届いている' })),
-    `<div class="merit">${fld('merit.notes', '特記事項', 'textarea', { w: 'wf', rows: 3, ph: '例：お弁当の無料配布\n例：駐車場から工場まで徒歩3分\n例：送迎バスあり', hint: '1行に1つ。求人原稿とヒアリングシートにそのまま載ります' })}</div>`,
-  ].join('');
+  return fg(fld('merit.notes', '特記事項', 'textarea', { w: 'wf', rows: 4, ph: '例：お弁当の無料配布\n例：駐車場から工場まで徒歩3分\n例：夏は暑いがスポットクーラーあり\n例：重い物はクレーンで運ぶ', hint: '1行に1つ。求人原稿とヒアリングシートにそのまま載ります' }));
 }
 function shiftRows(i, p) {
   return `<div class="shifts"><div class="shift shift-head"><span>名称</span><span>開始</span><span class="sep"></span><span>終了</span><span>休憩(分)</span><span>休憩 開始</span><span class="sep"></span><span>休憩 終了</span><span>実働</span><span></span></div>
@@ -294,7 +288,7 @@ function formA1(c) {
     fld('company.access', '最寄り・アクセス', 'text', { w: 'w2', ph: '例：圏央道 久喜ICより車で5分' }),
   )) + section('職種と条件', pos + (c.positions.length < 4 ? `<button class="btn sm" data-act="addpos">＋ 職種を追加</button>` : ''), '1つの受注で職種や単価が複数ある場合は職種を追加します（最大4つ・稟議書の①〜④に対応）。')
     + section('勤務条件（共通）', fg(fld('work.holidays', '休日', 'text', { req: true, w: 'w3', ph: '例：土・日・祝（会社カレンダー）GW・夏季・年末年始' })))
-    + section('ざっくりメリット・デメリット', meritFields(), '応募者が一番知りたい現場の実感です。数字（何度・何キロ・築何年・何分）が分かれば入れてください。求人原稿とヒアリングシートに反映されます。')
+    + section('ざっくりメリット・デメリット', meritFields(), '応募者が一番知りたい現場の実感を、箇条書きで書きます。暑さ・重さ・きれいさなどは、数字（何度・何キロ・築何年）まで書けると伝わります。')
     + section('RDへの発注内容', fg(
       fld('adOrder.note', '特記事項', 'textarea', { w: 'wf', rows: 4, ph: '例：全体で10名ぐらいの受注、11月末までに5名入れたい\n例：未経験OK・日勤スタートを強調したい\n例：60歳以上は不可', hint: '媒体はRDが決めるため、ここでは指定しません' }),
     ));
