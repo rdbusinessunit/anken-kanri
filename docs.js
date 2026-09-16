@@ -139,8 +139,7 @@ function adDraft(c, p) {
     meritLines(c, true).length && `【職場の特徴】\n${meritLines(c, true).map(x => '・' + x).join('\n')}`,
     c.hearing.environment && `【職場環境】${c.hearing.environment}`,
     `【募集人数】${p.headcount}名`,
-    (c.adOrder.media || []).length && `（掲載希望媒体：${c.adOrder.media.join('・')}）`,
-    c.adOrder.note && `（RDへの要望：${c.adOrder.note}）`,
+    c.adOrder.note && `（RDへの特記事項：${c.adOrder.note}）`,
   ].filter(Boolean).join('\n');
 }
 function docAd(c) {

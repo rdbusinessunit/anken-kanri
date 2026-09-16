@@ -119,7 +119,7 @@ function postingDetail(c, groups = adGroupsFor(c)) {
       <div class="fg" style="margin-top:14px">
         <div class="f"><label>RDの作業状況</label><select class="inp" data-case="${c.id}" data-ck="flow.rd.state">${OPT.rd.map(x => `<option${x === c.flow.rd.state ? ' selected' : ''}>${x}</option>`).join('')}</select></div>
         <div class="f"><label>RD担当</label><select class="inp" data-case="${c.id}" data-ck="flow.rd.tanto"><option value="">—</option>${C.staff.map(x => `<option${x === c.flow.rd.tanto ? ' selected' : ''}>${esc(x)}</option>`).join('')}</select></div>
-        <div class="f"><label>エリアの相場時給</label><div class="suffix"><input class="inp" type="number" data-case="${c.id}" data-ck="market.wage" value="${esc(c.market.wage)}" placeholder="競合の時給"><span>円</span></div></div>
+        <div class="f"><label>エリアの相場時給</label><div class="suffix"><input class="inp" type="number" step="50" min="0" data-case="${c.id}" data-ck="market.wage" value="${esc(c.market.wage)}" placeholder="競合の時給"><span>円</span></div></div>
         <div class="f w2"><label>相場のメモ</label><input class="inp" type="text" data-case="${c.id}" data-ck="market.note" value="${esc(c.market.note)}" placeholder="例：近隣の同職種 1,350〜1,500円"></div>
       </div>
       ${c.pendingRd ? `<div class="banner info" style="margin:12px 0 0">営業が案件の内容を変更しました。<a href="#/case/${c.id}/log">変更履歴</a>を確認して求人に反映してください。<button class="btn sm" data-act="rdack" data-id="${c.id}">確認した</button></div>` : ''}
@@ -213,7 +213,7 @@ function viewSettings() {
     <div class="panel"><h3>求人媒体</h3><p>1行に1媒体。求人管理の列になります。</p>${ta('c-media', C.media.join('\n'))}</div>
     <div class="panel"><h3>稟議の承認者</h3><p>1行に1つ：役割｜名前。全員が承認すると決裁になります。稟議書の押印欄の並びにも使います。</p>${ta('c-appr', C.approvers.map(a => `${a.role}｜${a.name}`).join('\n'), 4)}</div>
     <div class="panel"><h3>ルール</h3><p>原価率＝支払単価÷請求単価（稟議書の原価率と同じ式）。</p>
-      <div class="fg"><div class="f"><label for="c-th">原価率しきい値</label><div class="suffix"><input class="inp" id="c-th" type="number" value="${C.threshold}"><span>%</span></div><small>以下なら稟議前に求人発注可</small></div>
+      <div class="fg"><div class="f"><label for="c-th">原価率しきい値</label><div class="suffix"><input class="inp" id="c-th" type="number" step="5" min="0" value="${C.threshold}"><span>%</span></div><small>以下なら稟議前に求人発注可</small></div>
       <div class="f"><label for="c-fix">求人の修正間隔</label><div class="suffix"><input class="inp" id="c-fix" type="number" value="${C.fixDays}"><span>日</span></div></div>
       <div class="f"><label for="c-rd">稟議の遅れ警告</label><div class="suffix"><input class="inp" id="c-rd" type="number" value="${C.ringiDays}"><span>日</span></div></div></div></div>
     <div class="panel"><h3>勤務説明書の定型文</h3><p>入社時必要品・保険・注意事項（1行に1つ）。</p>${ta('c-hitsuyo', C.fixed.hitsuyo, 3)}${ta('c-hoken', C.fixed.hoken, 4)}${ta('c-notes', C.fixed.notes.join('\n'), 6)}</div>

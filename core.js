@@ -32,7 +32,7 @@ const OPT = {
   speed: ['飛行機', '新幹線', '自動車'],
   keiyaku: ['人材派遣', '有料職業紹介', '特定技能', '請負'],
   listed: ['プライム', 'スタンダード', 'グロース', '上場子会社', '未上場'],
-  shiftType: ['日勤', '夜勤', '2交替', '3交替'],
+  shiftType: ['日勤', '夜勤', '2交替', '3交替', '変則'],
   sex: ['男性', '女性', '不問'],
   posture: ['立ち作業', '座り作業', '両方'],
   contract: ['長期', '短期'],
@@ -42,11 +42,9 @@ const OPT = {
   temp: ['暑い', '寒い', '普通', '空調完備'],
   weight: ['重い', '普通', '軽い'],
   clean: ['きれい', '普通', '汚い'],
-  bento: ['無料配布あり', 'なし'],
-  parking: ['近い', '遠い'],
 };
 // 勤務形態ごとの勤務時間欄。入社直後は日勤で教育することが多いので、日勤以外は＋1欄
-const SHIFT_PRESET = { '日勤': ['日勤'], '夜勤': ['日勤（教育）', '夜勤'], '2交替': ['日勤（教育）', '1直', '2直'], '3交替': ['日勤（教育）', '1直', '2直', '3直'] };
+const SHIFT_PRESET = { '日勤': ['日勤'], '夜勤': ['日勤（教育）', '夜勤'], '2交替': ['日勤（教育）', '1直', '2直'], '3交替': ['日勤（教育）', '1直', '2直', '3直'], '変則': ['日勤（教育）', 'シフト①', 'シフト②', 'シフト③'] };
 // 現場実態ヒアリング（プロテリアル金属の見学メモ様式）。作業内容・立ち座り・完成品は職種欄、暑さ・重さ・きれいさは「ざっくりメリット・デメリット」で入力するため除外
 const KENGAKU = [
   ['職場の周辺環境', 'q01', '職場の周辺環境', ''],
@@ -279,7 +277,7 @@ function newCase() {
     facilities: { checks: [], shokudoNote: '', otherNote: '' },
     setsumei: { officeTanto: '', uniform: [], training: 'キャリア形成支援に基づくe-ラーニング制度', notes: '' },
     kengaku: {},
-    merit: { temp: '', tempC: '', tempNote: '', weight: '', weightKg: '', weightNote: '', clean: '', age: '', cleanNote: '', bento: '', parking: '', parkingMin: '', parkingNote: '' },
+    merit: { temp: '', tempC: '', tempNote: '', weight: '', weightKg: '', weightNote: '', clean: '', age: '', cleanNote: '', notes: '' },
     aliases: [], adCodes: [],
     market: { wage: '', note: '' },
     flow: { area1: { done: false, at: '', by: '' }, ringi: { state: '未上申', submittedAt: '', decidedAt: '', approvals: {}, changedAfterApproval: false }, area3: { done: false, at: '', by: '' }, rd: { state: '未着手', tanto: '' }, closed: false },
@@ -310,6 +308,10 @@ function normalizeCase(c) {
     if (kg.q03) out.merit.cleanNote = j('q03');
     if (kg.q05 && out.positions.every(p => !p.product)) out.positions.forEach(p => { p.product = kg.q05; });
   }
+  const om = c.merit || {};
+  if (!out.merit.notes && (om.bento || om.parking)) {
+    out.merit.notes = [om.bento === '無料配布あり' ? 'お弁当の無料配布あり' : '', om.parking ? `駐車場から工場まで${om.parking}${filled(om.parkingMin) ? `（約${om.parkingMin}分）` : ''}${om.parkingNote ? '　' + om.parkingNote : ''}` : ''].filter(Boolean).join('\n');
+  }
   out.aliases = c.aliases || []; out.adCodes = c.adCodes || []; out.history = c.history || [];
   return out;
 }
@@ -328,8 +330,7 @@ function meritLines(c, positiveOnly) {
   if (m.temp) add(m.temp === '空調完備' || m.temp === '普通', `暑さ・寒さ：${m.temp}${n(m.tempC, '', '℃くらい')}${positiveOnly ? '' : note(m.tempNote)}`);
   if (m.weight) add(m.weight === '軽い', `重さ：${m.weight}${n(m.weightKg, '', 'kgくらい')}${positiveOnly ? '' : note(m.weightNote)}`);
   if (m.clean) add(m.clean === 'きれい', `職場のきれいさ：${m.clean}${n(m.age, '築', '年くらい')}${positiveOnly ? '' : note(m.cleanNote)}`);
-  if (m.bento) add(m.bento === '無料配布あり', `お弁当の無料配布：${m.bento}`);
-  if (m.parking) add(m.parking === '近い', `駐車場から工場まで：${m.parking}${n(m.parkingMin, '約', '分')}${positiveOnly ? '' : note(m.parkingNote)}`);
+  String(m.notes || '').split('\n').map(x => x.trim()).filter(Boolean).forEach(x => L.push(x));
   return L;
 }
 // 勤務形態に合わせて勤務時間欄の数と名称をそろえる（入力済みの欄は消さない）
@@ -379,7 +380,7 @@ const kengakuCount = c => KENGAKU.filter(q => filled(c.kengaku[q[1]])).length;
 const REQ = {
   a1: {
     title: '① 簡易求人',
-    c: [['kyoten', '拠点'], ['tanto', '営業担当'], ['company.name', '取引先企業名'], ['company.plant', '就業先事業所'], ['company.address', '就業先住所'], ['work.holidays', '休日'], ['merit.temp', '暑さ・寒さ'], ['merit.weight', '重さ'], ['merit.clean', 'きれいさ'], ['merit.bento', 'お弁当'], ['merit.parking', '駐車場からの距離']],
+    c: [['kyoten', '拠点'], ['tanto', '営業担当'], ['company.name', '取引先企業名'], ['company.plant', '就業先事業所'], ['company.address', '就業先住所'], ['work.holidays', '休日'], ['merit.temp', '暑さ・寒さ'], ['merit.weight', '重さ'], ['merit.clean', 'きれいさ']],
     p: [['name', '職種'], ['headcount', '募集人数'], ['bill', '請求単価'], ['pay', '時給'], ['product', '完成品・用途'], ['task', '作業内容']], shifts: true,
   },
   a2: {

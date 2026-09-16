@@ -32,7 +32,11 @@ function fld(path, label, type = 'text', o = {}) {
     case 'select': input = `<select id="${id}" data-p="${path}">${['', ...o.options].map(x => { const [val, lb] = Array.isArray(x) ? x : [x, x]; return `<option value="${esc(val)}"${String(v) === String(val) ? ' selected' : ''}>${esc(lb || '選択…')}</option>`; }).join('')}</select>`; break;
     case 'seg': input = `<div class="seg" role="radiogroup" aria-label="${esc(label)}">${o.options.map(x => `<label><input type="radio" name="${id}" data-p="${path}" value="${esc(x)}"${String(v) === String(x) ? ' checked' : ''}><span>${esc(x)}</span></label>`).join('')}</div>`; break;
     case 'checks': input = `<div class="checks">${o.options.map(x => `<label><input type="checkbox" data-p="${path}" data-multi value="${esc(x)}"${(Array.isArray(v) ? v : []).includes(x) ? ' checked' : ''}>${esc(x)}</label>`).join('')}</div>`; break;
-    case 'yen': case 'num': input = `<div class="suffix"><input type="number" inputmode="decimal" id="${id}" data-p="${path}" data-t="num" value="${esc(v)}" step="${o.step || 'any'}"${o.min != null ? ` min="${o.min}"` : ''} placeholder="${esc(o.ph || '')}"><span>${type === 'yen' ? '円' : esc(o.unit || '')}</span></div>`; break;
+    case 'yen': case 'num': {
+      const step = o.step != null ? o.step : type === 'yen' ? 50 : o.unit === '%' ? 5 : 1;
+      const min = o.min != null ? o.min : 0;
+      input = `<div class="suffix"><input type="number" inputmode="decimal" id="${id}" data-p="${path}" data-t="num" value="${esc(v)}" step="${step}" min="${min}" placeholder="${esc(o.ph || '')}"><span>${type === 'yen' ? '円' : esc(o.unit || '')}</span></div>`; break;
+    }
     case 'date': input = `<input type="date" id="${id}" data-p="${path}" value="${esc(v)}">`; break;
     case 'time': input = `<input type="time" id="${id}" data-p="${path}" value="${esc(v)}" step="300">`; break;
     default: input = `<input type="text" id="${id}" data-p="${path}"${t} value="${esc(v)}" placeholder="${esc(o.ph || '')}"${o.list ? ` list="${o.list}"` : ''} autocomplete="off">`;
@@ -237,8 +241,7 @@ function meritFields() {
     row(fld('merit.temp', '暑いのか、寒いのか', 'seg', { req: true, miss: '暑さ・寒さ', options: OPT.temp }), fld('merit.tempC', '何度ぐらいか', 'num', { unit: '℃' }), fld('merit.tempNote', '対策・補足', 'text', { ph: '例：スポットクーラー・空調服の貸出あり' })),
     row(fld('merit.weight', '重いのか、軽いのか', 'seg', { req: true, miss: '重さ', options: OPT.weight }), fld('merit.weightKg', '何キロくらいか', 'num', { unit: 'kg' }), fld('merit.weightNote', '対策・補足', 'text', { ph: '例：重い物はクレーンで運ぶ' })),
     row(fld('merit.clean', 'きれいなのか、汚いのか', 'seg', { req: true, miss: 'きれいさ', options: OPT.clean }), fld('merit.age', '築何年ぐらいか', 'num', { unit: '年' }), fld('merit.cleanNote', '補足', 'text', { ph: '例：古いが清掃が行き届いている' })),
-    row(fld('merit.bento', 'お弁当の無料配布', 'seg', { req: true, miss: 'お弁当', options: OPT.bento }), '<div></div>', '<div></div>'),
-    row(fld('merit.parking', '駐車場から工場が近いか', 'seg', { req: true, miss: '駐車場からの距離', options: OPT.parking }), fld('merit.parkingMin', '何分ぐらいか', 'num', { unit: '分' }), fld('merit.parkingNote', '補足', 'text', { ph: '例：指定駐車場から徒歩3分' })),
+    `<div class="merit">${fld('merit.notes', '特記事項', 'textarea', { w: 'wf', rows: 3, ph: '例：お弁当の無料配布\n例：駐車場から工場まで徒歩3分\n例：送迎バスあり', hint: '1行に1つ。求人原稿とヒアリングシートにそのまま載ります' })}</div>`,
   ].join('');
 }
 function shiftRows(i, p) {
@@ -276,7 +279,7 @@ function formA1(c) {
     <div class="calc" data-live="rate:${i}">${rateCalc(i)}</div>
     <div class="fg" style="margin-top:12px">${jobFields(i, p, false)}</div>
     <div class="f" style="margin-top:12px"><span class="lb">勤務時間<i class="req">必須</i></span><small>勤務形態を選ぶと欄の数がそろいます（日勤1・夜勤2・2交替3・3交替4。入社直後の日勤教育分を1つ含みます）</small>${shiftRows(i, p)}</div>
-    <div class="fg" style="margin-top:12px">${fld(`positions.${i}.kotsuRule`, '交通費の支給方法', 'text', { w: 'w2', ph: '例：1km 10円' })}${fld(`positions.${i}.kotsuCap`, '交通費（上限）', 'yen', { step: 100, min: 0, ph: '13700' })}</div>
+    <div class="fg" style="margin-top:12px">${fld(`positions.${i}.kotsuRule`, '交通費の支給方法', 'text', { w: 'w2', ph: '例：1km 10円' })}${fld(`positions.${i}.kotsuCap`, '交通費（上限）', 'yen', { ph: '13700' })}</div>
   </div>`).join('');
   return section('受注情報', fg(
     fld('kyoten', '拠点', 'select', { req: true, options: C.kyotens.map(k => [k.id, `${k.id}（${k.corp} ${k.office}）`]) }),
@@ -293,8 +296,7 @@ function formA1(c) {
     + section('勤務条件（共通）', fg(fld('work.holidays', '休日', 'text', { req: true, w: 'w3', ph: '例：土・日・祝（会社カレンダー）GW・夏季・年末年始' })))
     + section('ざっくりメリット・デメリット', meritFields(), '応募者が一番知りたい現場の実感です。数字（何度・何キロ・築何年・何分）が分かれば入れてください。求人原稿とヒアリングシートに反映されます。')
     + section('RDへの発注内容', fg(
-      fld('adOrder.media', '掲載したい媒体', 'checks', { options: C.media, w: 'wf' }),
-      fld('adOrder.note', '求人で強調したい点・注意点', 'textarea', { w: 'wf', rows: 3, ph: '例：未経験OK・日勤スタート。夜勤手当を目立たせたい。60歳以上は不可。' }),
+      fld('adOrder.note', '特記事項', 'textarea', { w: 'wf', rows: 4, ph: '例：全体で10名ぐらいの受注、11月末までに5名入れたい\n例：未経験OK・日勤スタートを強調したい\n例：60歳以上は不可', hint: '媒体はRDが決めるため、ここでは指定しません' }),
     ));
 }
 
@@ -366,11 +368,11 @@ function formA3(c) {
     )}
     <div class="fs" style="padding-top:12px;border:0"><h3 style="font-size:12px">月の稼働と月収例</h3>${fg(
       fld(`positions.${i}.days`, '稼働日数', 'num', { unit: '日/月' }),
-      fld(`positions.${i}.monthH`, '稼働時間', 'num', { unit: 'H/月', ph: fmtH(suggestMonthH(p)) || '自動計算' }),
-      fld(`positions.${i}.nightH`, '深夜時間', 'num', { unit: 'H/月' }),
-      fld(`positions.${i}.overtimeH`, '残業時間', 'num', { unit: 'H/月' }),
-      fld(`positions.${i}.normalOtH`, '通常残業', 'num', { unit: 'H/月' }),
-      fld(`positions.${i}.holidayH`, '休日出勤', 'num', { unit: 'H/月' }),
+      fld(`positions.${i}.monthH`, '稼働時間', 'num', { unit: 'H/月', step: 0.5, ph: fmtH(suggestMonthH(p)) || '自動計算' }),
+      fld(`positions.${i}.nightH`, '深夜時間', 'num', { unit: 'H/月', step: 0.5 }),
+      fld(`positions.${i}.overtimeH`, '残業時間', 'num', { unit: 'H/月', step: 0.5 }),
+      fld(`positions.${i}.normalOtH`, '通常残業', 'num', { unit: 'H/月', step: 0.5 }),
+      fld(`positions.${i}.holidayH`, '休日出勤', 'num', { unit: 'H/月', step: 0.5 }),
       fld(`positions.${i}.kotsuMonthly`, '月収例に含める交通費', 'yen'),
     )}<div class="calc" data-live="money:${i}" style="display:block">${moneyCalc(i)}</div></div>
   </div>`).join('');
