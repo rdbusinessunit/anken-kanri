@@ -282,6 +282,7 @@ function formA1(c) {
       fld(`positions.${i}.sex`, '性別', 'seg', { options: OPT.sex }),
       fld(`positions.${i}.ageMin`, '年齢（下限）', 'num', { unit: '歳', step: 5, min: 0 }),
       fld(`positions.${i}.ageMax`, '年齢（上限）', 'num', { unit: '歳まで', step: 5, min: 0 }),
+      fld(`positions.${i}.overtimeH`, '残業見込み', 'num', { unit: 'H/月', step: 0.5, hint: '③と共通' }),
       fld(`positions.${i}.bill`, '請求単価', 'yen', { req: true, miss: '請求単価', step: 50, min: 0 }),
       fld(`positions.${i}.pay`, '時給（支払単価）', 'yen', { req: true, miss: '時給', step: 50, min: 0 }),
     )}
@@ -302,7 +303,17 @@ function formA1(c) {
     fld('company.pref', '地域（一般賃金の地域指数）', 'text', { list: 'dl-areas', ph: prefFromAddr(c.company.address) || '住所から自動', hint: '空欄なら住所の都道府県を使います' }),
     fld('company.access', '最寄り・アクセス', 'text', { w: 'w2', ph: '例：圏央道 久喜ICより車で5分' }),
   )) + section('職種と条件', pos + (c.positions.length < 4 ? `<button class="btn sm" data-act="addpos">＋ 職種を追加</button>` : ''), '1つの受注で職種や単価が複数ある場合は職種を追加します（最大4つ・稟議書の①〜④に対応）。')
-    + section('勤務条件（共通）', fg(fld('work.holidays', '休日', 'text', { req: true, w: 'w3', ph: '例：土・日・祝（会社カレンダー）GW・夏季・年末年始' })))
+    + section('勤務条件（共通）', fg(
+      fld('work.holidays', '休日', 'text', { req: true, w: 'w2', ph: '例：土・日・祝（会社カレンダー）GW・夏季・年末年始' }),
+      fld('hearing.annualHolidays', '年間休日', 'num', { unit: '日', hint: '③と共通' }),
+    ))
+    + section('職場・待遇', fg(
+      fld('facilities.checks', '福利厚生・設備', 'checks', { options: OPT.facilities, w: 'wf', hint: '③と共通' }),
+      fld('facilities.shokudoNote', '食堂の詳細', 'text', { w: 'w2', ph: '例：1直＝440円 2直＝450円 3直＝持参' }),
+      fld('facilities.otherNote', 'その他（駐車場・喫煙など）', 'text', { w: 'w2' }),
+      fld('hearing.environment', '職場環境', 'textarea', { w: 'wf', rows: 2, ph: '例：冷暖房完備の綺麗な事務所', hint: '応募率に影響大。③と共通' }),
+      fld('hearing.appeal', 'その他アピールポイント', 'textarea', { w: 'wf', rows: 2, hint: 'ヒアリングシートの備考欄に入ります。③と共通' }),
+    ), 'ヒアリングシートに載る項目です。③詳細・勤務説明と同じ内容で、どちらで入力しても構いません。')
     + section('ざっくりメリット・デメリット', meritFields(), '応募者が一番知りたい現場の実感を、箇条書きで書きます。暑さ・重さ・きれいさなどは、数字（何度・何キロ・築何年）まで書けると伝わります。')
     + section('RDへの発注内容', fg(
       fld('adOrder.note', '特記事項', 'textarea', { w: 'wf', rows: 4, ph: '例：全体で10名ぐらいの受注、11月末までに5名入れたい\n例：未経験OK・日勤スタートを強調したい\n例：60歳以上は不可', hint: '媒体はRDが決めるため、ここでは指定しません' }),
