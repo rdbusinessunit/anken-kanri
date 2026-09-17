@@ -253,7 +253,7 @@ function meritFields() {
   return fg(fld('merit.notes', '特記事項', 'textarea', { w: 'wf', rows: 4, ph: '例：お弁当の無料配布\n例：駐車場から工場まで徒歩3分\n例：夏は暑いがスポットクーラーあり\n例：重い物はクレーンで運ぶ', hint: '1行に1つ。求人原稿とヒアリングシートにそのまま載ります' }));
 }
 function shiftRows(i, p) {
-  return `<div class="shifts"><div class="shift shift-head"><span>名称</span><span>開始</span><span class="sep"></span><span>終了</span><span>休憩(分)</span><span>休憩 開始</span><span class="sep"></span><span>休憩 終了</span><span>実働</span><span></span></div>
+  return `<div class="shifts"><div class="shift shift-head"><span>名称</span><span>開始</span><span class="sep"></span><span>終了</span><span>休憩(分)</span><span>休憩 開始</span><span class="sep"></span><span>休憩 終了</span><span>実働</span><span>備考</span><span></span></div>
   ${p.shifts.map((s, j) => { const b = `positions.${i}.shifts.${j}`; ['label', 'start', 'end', 'breakMin', 'breakFrom', 'breakTo'].forEach((x, n) => LABELS[`positions.*.shifts.*.${x}`] = ['名称', '開始', '終了', '休憩(分)', '休憩開始', '休憩終了'][n]); return `<div class="shift">
     <input type="text" data-p="${b}.label" value="${esc(s.label)}" list="dl-shift" aria-label="勤務${j + 1} 名称">
     ${timeSel(`${b}.start`, s.start, `勤務${j + 1} 開始`)}<span class="sep">～</span>
@@ -262,7 +262,8 @@ function shiftRows(i, p) {
     ${timeSel(`${b}.breakFrom`, s.breakFrom, `勤務${j + 1} 休憩開始`)}<span class="sep">－</span>
     ${timeSel(`${b}.breakTo`, s.breakTo, `勤務${j + 1} 休憩終了`)}
     <span class="h" data-live="sh:${i}:${j}">${shiftH(s) != null ? fmtH(shiftH(s)) + 'H' : '—'}</span>
-    <button class="x" data-act="delshift" data-i="${i}" data-j="${j}" title="この勤務時間を削除" aria-label="削除"${p.shifts.length < 2 ? ' disabled' : ''}>×</button></div>`; }).join('')}
+    <label class="chk" title="この勤務時間に備考を書く"><input type="checkbox" data-p="${b}.noteOn" data-bool${s.noteOn ? ' checked' : ''}><span>備考</span></label>
+    <button class="x" data-act="delshift" data-i="${i}" data-j="${j}" title="この勤務時間を削除" aria-label="削除"${p.shifts.length < 2 ? ' disabled' : ''}>×</button></div>${s.noteOn ? `<div class="shiftnote"><span>${esc(s.label || '勤務' + (j + 1))}の備考</span><input type="text" data-p="${b}.note" value="${esc(s.note || '')}" placeholder="例：繁忙期は7:30開始　例：金曜のみ16:00終業"></div>` : ''}`; }).join('')}
   </div>${p.shifts.length < 4 ? `<button class="btn sm ghost" data-act="addshift" data-i="${i}" style="margin-top:6px">＋ 勤務時間を追加</button>` : ''}`;
 }
 function rateCalc(i) {

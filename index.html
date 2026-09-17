@@ -227,7 +227,12 @@ table.list tbody tr.click:hover td{background:var(--surface-2)}
 .calc b{color:var(--ink);font-variant-numeric:tabular-nums}
 .calc .ng{color:var(--crit)} .calc .okc{color:var(--ok)}
 .shifts{display:grid;gap:6px;margin-top:4px}
-.shift{display:grid;grid-template-columns:104px 124px 12px 124px 76px 124px 12px 124px 56px 28px;gap:6px;align-items:center}
+.shift{display:grid;grid-template-columns:104px 124px 12px 124px 76px 124px 12px 124px 56px 52px 28px;gap:6px;align-items:center}
+.shift .chk{display:flex;align-items:center;gap:4px;font-size:11.5px;color:var(--ink-2);cursor:pointer;white-space:nowrap}
+.shift .chk input{width:15px;height:15px;accent-color:var(--accent)}
+.shiftnote{display:grid;grid-template-columns:104px minmax(0,1fr);gap:6px;align-items:center;margin:0 0 4px}
+.shiftnote span{font-size:11.5px;color:var(--ink-2)}
+.shiftnote input{padding:6px 7px;border:1px solid var(--line);border-radius:var(--r);background:var(--surface);min-height:34px;width:100%}
 .tsel{display:flex;align-items:center;gap:2px}
 .tsel select{flex:1;min-width:0;padding:6px 2px;border:1px solid var(--line);border-radius:var(--r);background:var(--surface);min-height:34px;font-variant-numeric:tabular-nums}
 .tsel span{color:var(--ink-3)}
@@ -238,7 +243,7 @@ table.list tbody tr.click:hover td{background:var(--surface-2)}
 .shift .x{border:0;background:none;color:var(--ink-3);cursor:pointer;font-size:16px}
 .shift input{padding:6px 7px;border:1px solid var(--line);border-radius:var(--r);background:var(--surface);min-height:34px;width:100%}
 .shift-head{font-size:10.5px;color:var(--ink-3);font-weight:700}
-@media (max-width:900px){.shift{grid-template-columns:1fr 1fr 1fr;}.shift .sep{display:none}.shift-head{display:none}}
+@media (max-width:900px){.shift{grid-template-columns:1fr 1fr 1fr;}.shift .sep{display:none}.shift-head{display:none}.shiftnote{grid-template-columns:1fr}}
 .money{display:grid;grid-template-columns:auto auto auto 1fr;gap:2px 12px;font-size:12.5px;font-variant-numeric:tabular-nums}
 .money .r{text-align:right}
 .money .tot{border-top:1px solid var(--line);padding-top:4px;font-weight:700}
@@ -380,7 +385,7 @@ label.btn[for]{cursor:pointer}
 /* 画面の更新が利用者に届くようにする仕組み
    ・JavaScriptは5分ごとに新しいものを取りにいく
    ・version.json の版番号がこのページより新しければ、自動で読み直す */
-const APP_VERSION = "202609171404";
+const APP_VERSION = "202609171418";
 (function () {
   var files = ["config.js","ref.js","core.js","caseview.js","docs.js","postings.js","ads.js","xlsxfill.js","main.js"];
   var q = "?v=" + Math.floor(Date.now() / 300000);

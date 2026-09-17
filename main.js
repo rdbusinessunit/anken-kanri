@@ -143,6 +143,10 @@ function applyInput(t) {
   markDirty();
   const st = p.match(/^positions\.(\d+)\.shiftType$/);
   if (st) { syncShifts(S.draft.positions[+st[1]]); rerender(); return; }
+  if (/^positions\.\d+\.shifts\.\d+\.noteOn$/.test(p)) {
+    if (!v) setp(S.draft, p.replace('.noteOn', '.note'), '');   // チェックを外したら備考も消す
+    rerender(); const n = $(`[data-p="${p.replace('.noteOn', '.note')}"]`); if (n) n.focus(); return;
+  }
   refreshLive();
   const f = t.closest('.f'); if (f && f.classList.contains('miss') && filled(v)) f.classList.remove('miss');
 }

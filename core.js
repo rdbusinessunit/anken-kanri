@@ -250,7 +250,7 @@ function mergeConfig(c) {
 }
 
 /* ===== 案件モデル ===== */
-function newShift(label = '日勤') { return { label, start: '', end: '', breakMin: 60, breakFrom: '', breakTo: '' }; }
+function newShift(label = '日勤') { return { label, start: '', end: '', breakMin: 60, breakFrom: '', breakTo: '', noteOn: false, note: '' }; }
 function newPosition() {
   return {
     name: '', shiftType: '日勤', headcount: 1, sex: '不問', ageMin: 18, ageMax: '', bill: '', pay: '', product: '', task: '', detail: '',
@@ -321,6 +321,10 @@ function detailText(p) {
   return parts.length === 1 && !p.product && !p.task ? String(p.detail) : parts.join('\n');
 }
 const detailLen = p => [p.product, p.task, p.detail].map(x => String(x || '').trim()).join('').length;
+function shiftNotes(p) {
+  return (p.shifts || []).filter(s => s.note && String(s.note).trim()).map(s => `${s.label ? s.label + '：' : ''}${String(s.note).trim()}`);
+}
+function allShiftNotes(p) { return [p.shiftNote, ...shiftNotes(p)].filter(x => x && String(x).trim()).join('　'); }
 function meritLines(c) {
   return String((c.merit || {}).notes || '').split('\n').map(x => x.trim()).filter(Boolean);
 }

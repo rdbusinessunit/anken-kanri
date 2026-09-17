@@ -98,7 +98,7 @@ function cellsHearing(c, p) {
   };
   [0, 1, 2, 3].forEach(j => {
     cells['G' + (18 + j * 2)] = time(j);
-    cells['AB' + (18 + j * 2)] = sh[j] ? sh[j].label || '' : '';
+    cells['AB' + (18 + j * 2)] = sh[j] ? [sh[j].label, sh[j].note].filter(Boolean).join('　') : '';
     cells['G' + (26 + j * 2)] = brk(j);
     cells['AB' + (26 + j * 2)] = j === 0 ? p.shiftNote || '' : '';
   });
@@ -180,7 +180,7 @@ function cellsSetsumei(c, pair) {
     const m = monthly(p);
     cells[M.name] = p.name; cells[M.koyo] = p.koyo; cells[M.ext] = '';
     cells[M.ageMin] = +p.ageMin || ''; cells[M.ageMax] = +p.ageMax || '';
-    cells[M.qual] = p.qualification; cells[M.note] = p.shiftNote; cells[M.holidays] = c.work.holidays;
+    cells[M.qual] = p.qualification; cells[M.note] = allShiftNotes(p); cells[M.holidays] = c.work.holidays;
     cells[M.days] = +p.days || ''; cells[M.monthH] = monthHours(p) != null ? +fmtH(monthHours(p)) : '';
     cells[M.night] = +p.nightH || 0; cells[M.ot] = +p.overtimeH || 0; cells[M.nOt] = +p.normalOtH || 0; cells[M.hol] = +p.holidayH || 0;
     cells[M.pay] = +p.pay || ''; cells[M.kotsuCap] = +p.kotsuCap || '';
@@ -194,7 +194,7 @@ function cellsSetsumei(c, pair) {
       cells[refs[2]] = s ? +fmtH(shiftH(s)) : ''; cells[refs[3]] = s ? +s.breakMin || 0 : '';
       cells[refs[4]] = s && s.breakFrom ? fmtTime(s.breakFrom) : ''; cells[refs[5]] = s && s.breakTo ? fmtTime(s.breakTo) : '';
     });
-    if (sh.length > 3) cells[M.note] = [p.shiftNote, `※他に ${sh.slice(3).map(s => `${s.label} ${fmtTime(s.start)}～${fmtTime(s.end)}`).join('、')}`].filter(Boolean).join(' ');
+    if (sh.length > 3) cells[M.note] = [allShiftNotes(p), `※他に ${sh.slice(3).map(s => `${s.label} ${fmtTime(s.start)}～${fmtTime(s.end)}`).join('、')}`].filter(Boolean).join(' ');
   });
   return cells;
 }
