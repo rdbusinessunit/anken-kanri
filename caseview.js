@@ -146,14 +146,28 @@ function tabsHTML(c, tab, tabHref) {
     return `<a href="${tabHref(t)}"${t === tab ? ' aria-current="page"' : ''}>${l}${badge}</a>`;
   }).join('');
 }
+function tabToolbar(c, tab) {
+  const map = { a1: ['hearing', '新規受注時ヒアリングシートを出力'], a2: ['ringi', '契約稟議書を出力'], a3: ['setsumei', '勤務説明書を出力'] };
+  if (!map[tab]) return '';
+  const [kind, label] = map[tab];
+  let extra = '';
+  if (kind === 'hearing' && c.positions.length > 1) {
+    extra = `<select class="inp" id="exppos" style="width:auto" aria-label="出力する職種">${c.positions.map((p, i) => `<option value="${i}">${esc(p.name || '職種' + (i + 1))}</option>`).join('')}</select>`;
+  }
+  if (kind === 'setsumei' && c.positions.length > 2) {
+    extra = `<select class="inp" id="exppos" style="width:auto" aria-label="出力する職種">${c.positions.map((p, i) => i % 2 ? '' : `<option value="${i / 2}">職種${i + 1}${c.positions[i + 1] ? '・' + (i + 2) : ''}</option>`).join('')}</select>`;
+  }
+  return `<div class="row" style="padding:14px 0 0">${extra}<button class="btn" data-act="exp" data-kind="${kind}">${label}</button><span class="small muted">いただいた様式のExcelに、入力内容を入れて保存します</span></div>`;
+}
 function tabBody(c, tab, isNew) {
   MISS = new Set([...check(c, 'a1').miss, ...check(c, 'a2').miss, ...check(c, 'a3').miss]);
+  const bar = tabToolbar(c, tab);
   switch (tab) {
-    case 'a2': return formA2(c);
-    case 'a3': return formA3(c);
+    case 'a2': return bar + formA2(c);
+    case 'a3': return bar + formA3(c);
     case 'kg': return formKG(c);
     case 'log': return isNew ? `<p class="muted" style="padding:20px 0">保存すると履歴が残ります。</p>` : formLog(c);
-    default: return formA1(c);
+    default: return bar + formA1(c);
   }
 }
 

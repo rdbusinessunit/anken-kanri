@@ -230,6 +230,7 @@ const ACT = {
   async fixed(b) { const p = S.postings[b.dataset.id]; await Store.put('postings', p.id, { ...p, lastFix: today(), nextFix: addDays(today(), cfg().fixDays), updatedAt: nowISO(), updatedBy: S.me }); toast(`次回修正日を${fmtMD(addDays(today(), cfg().fixDays))}にしました`); },
   async delpost(b) { await Store.del('postings', b.dataset.id); },
   aireview(b) { if (!needMe()) aiReview(b.dataset.id); },
+  exp(b) { const sel = $('#exppos'); exportTemplate(b.dataset.kind, S.draft, sel ? +sel.value : 0); },
   savecfg: saveConfig, backup,
   async retry(b) { b.disabled = true; b.textContent = '接続しています…'; await Store.refresh(); rerender(); },
   impdrop(b) { const I = impState(); I.files.splice(+b.dataset.i, 1); I.v++; rerender(); },
