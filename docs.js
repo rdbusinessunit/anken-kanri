@@ -162,7 +162,7 @@ function viewDoc(r) {
     <div class="seg-f" role="group" aria-label="帳票">${DOCS.map(([k, l]) => `<button data-act="doctype" data-v="${k}" aria-pressed="${k === type}">${l}</button>`).join('')}</div>
     <span class="spacer"></span>
     <button class="btn" data-act="print">印刷・PDF</button>
-    <button class="btn primary" data-act="xlsx">${type === 'ad' ? 'Excelで保存' : '元の様式でExcel保存'}</button>
+    <button class="btn primary" data-act="xlsx">Excelで保存</button>
   </div>
   ${!miss.ok ? `<div class="banner warn noprint">未入力の項目があります：${esc(miss.miss.slice(0, 6).join('、'))}${miss.miss.length > 6 ? ` ほか${miss.miss.length - 6}件` : ''}　<a href="#/case/${c.id}/${type === 'ringi' ? 'a2' : type === 'ad' ? 'a1' : 'a3'}">入力する</a></div>` : ''}
   <div id="aiadout" class="noprint"></div>

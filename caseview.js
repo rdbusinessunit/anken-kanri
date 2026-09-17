@@ -157,7 +157,7 @@ function tabToolbar(c, tab) {
   if (kind === 'setsumei' && c.positions.length > 2) {
     extra = `<select class="inp" id="exppos" style="width:auto" aria-label="出力する職種">${c.positions.map((p, i) => i % 2 ? '' : `<option value="${i / 2}">職種${i + 1}${c.positions[i + 1] ? '・' + (i + 2) : ''}</option>`).join('')}</select>`;
   }
-  return `<div class="row" style="padding:14px 0 0">${extra}<button class="btn" data-act="exp" data-kind="${kind}">${label}</button><span class="small muted">いただいた様式のExcelに、入力内容を入れて保存します</span></div>`;
+  return `<div class="row" style="padding:14px 0 0">${extra}<button class="btn" data-act="exp" data-kind="${kind}">${label}</button><span class="small muted">入力した内容でExcelを作ります</span></div>`;
 }
 function tabBody(c, tab, isNew) {
   MISS = new Set([...check(c, 'a1').miss, ...check(c, 'a2').miss, ...check(c, 'a3').miss]);
