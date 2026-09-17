@@ -124,11 +124,11 @@ function cellsRingi(c) {
     D16: r.busho, J16: c.positions.map(p => p.name).filter(Boolean).join('／'),
     T16: [...new Set(c.positions.map(p => p.qualification).filter(Boolean))].join('／'),
     D17: dateSerial(r.keiyakuDate), J17: dateSerial(r.kikanFrom), P17: dateSerial(r.kikanTo), U17: r.koshin,
-    E18: men + any, H18: women,
+    E18: men || '', H18: women || '', K18: men + women + any,
     O18: r.billShime, R18: r.billNyukin, V18: r.billHitchaku,
     D24: c.work.holidays, N24: c.work.payShime, T24: c.work.payDay,
     F31: +w.jikangai || '', J31: +w.shinya || '', N31: +w.hoteigai || '', R31: +w.hotei || '', V31: +w.over60 || '',
-    A39: r.shoken, A41: [r.biko, any ? `※男女不問 ${any}人を含む（人数欄は男性側に計上）` : ''].filter(Boolean).join('\n'),
+    A39: r.shoken, A41: r.biko,
     A44: (ap[(appr[0] || {}).role] || {}).comment || '', A46: (ap[(appr[1] || {}).role] || {}).comment || '', A48: (ap[(appr[2] || {}).role] || {}).comment || '',
   };
   [0, 1, 2, 3].forEach(i => {
