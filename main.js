@@ -223,7 +223,10 @@ const ACT = {
   },
   doctype(b) { location.hash = `#/doc/${curId()}/${b.dataset.v}`; },
   print() { try { window.print(); } catch { toast('この表示では印刷できません。Excelで保存してから印刷してください', 'warn'); } },
-  xlsx() { exportXlsx(normalizeCase(S.cases[curId()]), parseRoute().tab || 'ringi'); },
+  xlsx() {
+    const c = normalizeCase(S.cases[curId()]); const t = parseRoute().tab || 'ringi';
+    if (TEMPLATES[t]) exportTemplate(t, c, 0); else exportXlsx(c, t);
+  },
   aiad() { if (!needMe()) aiJobAd(curId()); },
   openp(b, e) { if (e.target.closest('a,button,input,select')) return; S.open = S.open === b.dataset.id ? null : b.dataset.id; rerender(); },
   async addpost(b) { const id = uid(); await Store.put('postings', id, { id, caseId: b.dataset.id, media: cfg().media[0] || '', count: 1, url: '', start: today(), nextFix: addDays(today(), cfg().fixDays), lastFix: today(), status: '掲載中', imp: '', click: '', apply: '', updatedAt: nowISO(), updatedBy: S.me }); },
