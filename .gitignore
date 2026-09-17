@@ -3,3 +3,4 @@ migrate_data*.sql
 *バックアップ*.json
 *.xlsx
 *.csv
+!templates/*.xlsx
