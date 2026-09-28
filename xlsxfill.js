@@ -160,8 +160,13 @@ function cellsRingi(c) {
 function cellsSetsumei(c, pair) {
   const co = c.company, k = kyotenOf(c.kyoten), F = cfg().fixed, fac = c.facilities.checks || [];
   const A = pair[0], B = pair[1];
-  const L = { name: 'E11', koyo: 'E12', ext: 'L12', ageMin: 'E14', ageMax: 'H14', qual: 'E15', note: 'E31', holidays: 'E32', days: 'E34', monthH: 'J34', night: 'E35', ot: 'J35', nOt: 'E36', hol: 'J36', pay: 'F37', nightRate: 'E39', kotsuRule: 'E43', kotsuMonth: 'J43', kotsuCap: 'E49', shift: [['D25', 'G25', 'I25', 'K25', 'E26', 'G26'], ['D27', 'G27', 'I27', 'K27', 'E28', 'G28'], ['D29', 'G29', 'I29', 'K29', 'E30', 'G30']] };
-  const R = { name: 'O11', koyo: 'O12', ext: 'V12', ageMin: 'O14', ageMax: 'R14', qual: 'O15', note: 'O31', holidays: 'O32', days: 'O34', monthH: 'T34', night: 'O35', ot: 'T35', nOt: 'O36', hol: 'T36', pay: 'P37', nightRate: '', kotsuRule: 'P43', kotsuMonth: '', kotsuCap: 'O49', shift: [['N25', 'Q25', 'S25', 'U25', 'O26', 'Q26'], ['N27', 'Q27', 'S27', 'U27', 'O28', 'Q28'], ['N29', 'Q29', 'S29', 'U29', 'O30', 'Q30']] };
+  const mk = (on, label) => `${on ? '☑' : '□'}${label}`;
+  const has = x => fac.includes(x);
+  const uni = x => (c.setsumei.uniform || []).includes(x);
+  const etc = !!(c.facilities.otherNote || fac.some(x => ['自動販売機', '電子レンジ', '冷蔵庫', 'ポット', '駐車場', '喫煙所'].includes(x)));
+  const months = t => (String(t || '').match(/(\d+\s*[ヶヵか]?月)/) || [])[1] || '';
+  const L = { mark: 'C11', name: 'E11', koyo: 'E12', koyoMark: 'G12', ext: 'L12', posture: ['E23', 'G23', 'J23'], breakMark: [['D26', 'F26', 'H26'], ['D28', 'F28', 'H28'], ['D30', 'F30', 'H30']], note33: 'E33', ageMin: 'E14', ageMax: 'H14', qual: 'E15', note: 'E31', holidays: 'E32', days: 'E34', monthH: 'J34', night: 'E35', ot: 'J35', nOt: 'E36', hol: 'J36', pay: 'F37', nightRate: 'E39', kotsuRule: 'E43', kotsuMonth: 'J43', kotsuCap: 'E49', shift: [['D25', 'G25', 'I25', 'K25', 'E26', 'G26'], ['D27', 'G27', 'I27', 'K27', 'E28', 'G28'], ['D29', 'G29', 'I29', 'K29', 'E30', 'G30']] };
+  const R = { mark: 'M11', name: 'O11', koyo: 'O12', koyoMark: 'Q12', ext: 'V12', posture: ['O23', 'Q23', 'T23'], breakMark: [['N26', 'P26', 'R26'], ['N28', 'P28', 'R28'], ['N30', 'P30', 'R30']], note33: 'O33', ageMin: 'O14', ageMax: 'R14', qual: 'O15', note: 'O31', holidays: 'O32', days: 'O34', monthH: 'T34', night: 'O35', ot: 'T35', nOt: 'O36', hol: 'T36', pay: 'P37', nightRate: '', kotsuRule: 'P43', kotsuMonth: '', kotsuCap: 'O49', shift: [['N25', 'Q25', 'S25', 'U25', 'O26', 'Q26'], ['N27', 'Q27', 'S27', 'U27', 'O28', 'Q28'], ['N29', 'Q29', 'S29', 'U29', 'O30', 'Q30']] };
   const cells = {
     N2: '', D3: co.name, J3: co.plant, Q3: k.corp, U3: k.office ? `${k.office}営業所` : '', Q4: k.address, Q6: k.tel, Q7: k.fax,
     Q8: c.setsumei.officeTanto || c.tanto, T8: '', D5: co.address, D7: co.access, G7: '', I7: '', D9: co.description,
@@ -169,16 +174,36 @@ function cellsSetsumei(c, pair) {
     G51: c.work.payShime, H51: '締め', J51: c.work.payDay, K51: '', L51: '払い　（　銀行振込となります　）',
     N53: c.facilities.shokudoNote || (fac.includes('食堂') ? 'あり' : ''), N54: fac.includes('休憩室') ? 'あり' : '',
     N55: fac.includes('ロッカー') || fac.includes('更衣室') ? 'あり' : '', N56: c.facilities.otherNote || fac.filter(x => !['食堂', '休憩室', 'ロッカー', '更衣室'].includes(x)).join('、'),
-    N57: c.setsumei.training, E58: F.hitsuyo, E59: '',
+    N57: c.setsumei.training, E58: F.hitsuyo,
+    E52: mk(uni('作業服上'), '作業服上'), H52: mk(uni('作業服下'), '作業服下'), K52: mk(uni('ヘルメット') || uni('作業帽子'), 'ヘルメット'),
+    N52: mk(uni('安全靴'), '安全靴'), Q52: mk(uni('保護具'), '保護具'), T52: uni('作業帽子') ? '☑その他（作業帽子）' : '□その他',
+    H53: mk(!has('食堂'), 'なし'), K53: mk(has('食堂'), 'あり'),
+    H54: mk(!has('休憩室'), 'なし'), K54: mk(has('休憩室'), 'あり'),
+    H55: mk(!(has('ロッカー') || has('更衣室')), 'なし'), K55: mk(has('ロッカー') || has('更衣室'), 'あり'),
+    H56: mk(!etc, 'なし'), K56: mk(etc, 'あり'),
+    H57: mk(!c.setsumei.training, 'なし'), K57: mk(!!c.setsumei.training, 'あり'),
     E60: (F.hoken || '').split('\n')[0] || '', E61: (F.hoken || '').split('\n')[1] || '', E62: (F.hoken || '').split('\n')[2] || '',
     E65: F.gaiyo, E66: F.seido, S67: '',
   };
   const notes = [...(F.notes || []), ...String(c.setsumei.notes || '').split('\n').map(x => x.trim()).filter(Boolean)];
   for (let i = 0; i < 8; i++) { cells['B' + (67 + i)] = notes[i] ? '・' : ''; cells['C' + (67 + i)] = notes[i] || ''; cells['T' + (67 + i)] = ''; }
   [[A, L], [B, R]].forEach(([p, M]) => {
-    if (!p) { Object.values(M).forEach(v => { if (typeof v === 'string' && v) cells[v] = ''; }); M.shift.forEach(s => s.forEach(ref => { cells[ref] = ''; })); return; }
+    if (!p) {
+      Object.values(M).forEach(v => { if (typeof v === 'string' && v) cells[v] = ''; });
+      M.shift.forEach(s => s.forEach(ref => { cells[ref] = ''; }));
+      M.posture.forEach(ref => { cells[ref] = ''; });
+      M.breakMark.forEach(g => g.forEach(ref => { cells[ref] = ''; }));
+      cells[M.mark] = ''; cells[M.note33] = ''; cells[M.koyoMark] = '';
+      return;
+    }
+    cells[M.mark] = M === L ? '①' : '②';
+    cells[M.note33] = '※休日出勤がある場合があります。';
+    cells[M.koyoMark] = String(p.koyo || '').includes('長期') ? '○' : '';
+    cells[M.ext] = months(p.koyo);
+    M.posture.forEach((ref, n) => { cells[ref] = mk(p.posture === ['立ち作業', '座り作業', '両方'][n], ['立ち作業', '座り作業', '両方'][n]); });
+    M.breakMark.forEach((g, n) => { const on = (p.shifts || []).filter(x => x.start)[n]; cells[g[0]] = on ? '（ 休憩' : ''; cells[g[1]] = on ? '－' : ''; cells[g[2]] = on ? '）' : ''; });
     const m = monthly(p);
-    cells[M.name] = p.name; cells[M.koyo] = p.koyo; cells[M.ext] = '';
+    cells[M.name] = p.name; cells[M.koyo] = String(p.koyo || '').replace(/（[^）]*）/g, '').trim();
     cells[M.ageMin] = +p.ageMin || ''; cells[M.ageMax] = +p.ageMax || '';
     cells[M.qual] = p.qualification; cells[M.note] = allShiftNotes(p); cells[M.holidays] = c.work.holidays;
     cells[M.days] = +p.days || ''; cells[M.monthH] = monthHours(p) != null ? +fmtH(monthHours(p)) : '';
