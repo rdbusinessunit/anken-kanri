@@ -35,7 +35,7 @@ function setCell(doc, ref, value) {
   if (!cell) { cell = doc.createElementNS(ns, 'c'); cell.setAttribute('r', ref); row.appendChild(cell); }
   while (cell.firstChild) cell.removeChild(cell.firstChild);
   const v = value;
-  if (v === '' || v == null) { cell.removeAttribute('t'); return; }
+  if (v === '' || v == null) { cell.removeAttribute('t'); return cell; }
   if (typeof v === 'number' && isFinite(v)) {
     cell.removeAttribute('t');
     const ve = doc.createElementNS(ns, 'v'); ve.textContent = String(v); cell.appendChild(ve);
@@ -44,6 +44,40 @@ function setCell(doc, ref, value) {
     const is = doc.createElementNS(ns, 'is'), t = doc.createElementNS(ns, 't');
     t.setAttribute('xml:space', 'preserve'); t.textContent = String(v); is.appendChild(t); cell.appendChild(is);
   }
+  return cell;
+}
+/* 長い文章が1行で切れないように、折り返し表示の書式を作って割り当てる */
+function applyWrap(styles, cellEls) {
+  const ns = styles.documentElement.namespaceURI;
+  const xfs = styles.getElementsByTagName('cellXfs')[0]; if (!xfs) return;
+  const base = [...xfs.getElementsByTagName('xf')];
+  const made = new Map();
+  cellEls.forEach(cell => {
+    if (!cell) return;
+    const si = +(cell.getAttribute('s') || 0);
+    if (made.has(si)) { cell.setAttribute('s', made.get(si)); return; }
+    const src = base[si]; if (!src) return;
+    const xf = src.cloneNode(true);
+    xf.setAttribute('applyAlignment', '1');
+    let al = xf.getElementsByTagName('alignment')[0];
+    if (!al) { al = styles.createElementNS(ns, 'alignment'); xf.appendChild(al); }
+    al.setAttribute('wrapText', '1'); al.setAttribute('vertical', 'top');
+    xfs.appendChild(xf);
+    const idx = String(xfs.getElementsByTagName('xf').length - 1);
+    xfs.setAttribute('count', String(+idx + 1));
+    made.set(si, idx); cell.setAttribute('s', idx);
+  });
+}
+/* 行の高さを文章の行数に合わせる */
+function setRowHeight(doc, rowNum, pt) {
+  const rows = doc.getElementsByTagName('sheetData')[0].getElementsByTagName('row');
+  for (let i = 0; i < rows.length; i++) if (+rows[i].getAttribute('r') === rowNum) { rows[i].setAttribute('ht', String(pt)); rows[i].setAttribute('customHeight', '1'); return; }
+}
+const visLen = t => [...String(t == null ? '' : t)].reduce((n, ch) => n + (ch.charCodeAt(0) < 256 ? 0.5 : 1), 0);
+/* perLine＝1行に入る全角文字数 */
+function textRowHeight(text, perLine, base = 19.5, maxLines = 6) {
+  const lines = String(text == null ? '' : text).split('\n').reduce((n, x) => n + Math.max(1, Math.ceil(visLen(x) / perLine)), 0);
+  return Math.max(base, Math.min(maxLines, lines) * 16.5 + 3);
 }
 async function fillTemplate(kind, cells, filename) {
   const T = TEMPLATES[kind];
@@ -60,7 +94,15 @@ async function fillTemplate(kind, cells, filename) {
   const rel = [...rels.getElementsByTagName('Relationship')].find(r => r.getAttribute('Id') === rid);
   const path = 'xl/' + rel.getAttribute('Target').replace(/^\//, '').replace(/^xl\//, '');
   const doc = await parse(path);
-  Object.entries(cells).forEach(([ref, value]) => setCell(doc, ref, value));
+  const opts = cells.__opts || {};
+  const written = new Map();
+  Object.entries(cells).forEach(([ref, value]) => { if (ref === '__opts') return; const el = setCell(doc, ref, value); if (el) written.set(ref, el); });
+  if (opts.wrap && opts.wrap.length) {
+    const styles = await parse('xl/styles.xml');
+    applyWrap(styles, opts.wrap.map(r => written.get(r)));
+    zip.file('xl/styles.xml', new XMLSerializer().serializeToString(styles));
+  }
+  if (opts.rowHeights) Object.entries(opts.rowHeights).forEach(([r, h]) => setRowHeight(doc, +r, h));
   zip.file(path, new XMLSerializer().serializeToString(doc));
   // 開いたときに数式を計算し直す
   const calcPr = wb.getElementsByTagName('calcPr')[0];
@@ -82,17 +124,27 @@ const sanitize = s => String(s).replace(/[\\/:*?"<>|]/g, '_').slice(0, 90);
 const dotDate = s => fmtD(s || today()).replace(/\//g, '.');
 
 /* ---- ① 新規受注時ヒアリングシート ---- */
+const HEARING_FAC = ['更衣室', '食堂', '休憩室', '自動販売機', 'レンジ', '冷蔵庫', 'ポット', '駐車場'];
 function cellsHearing(c, p) {
   const h = c.hearing, sh = p.shifts || [];
+  const fac = c.facilities.checks || [];
+  const mk = (on, label) => `${on ? '☑' : '□'}${label}`;
+  const hasFac = x => fac.includes(x) || (x === 'レンジ' && fac.includes('電子レンジ'));
+  const facText = [
+    ...HEARING_FAC.map(x => mk(hasFac(x), x)),
+    ...fac.filter(x => !HEARING_FAC.includes(x) && x !== '電子レンジ').map(x => mk(true, x)),
+  ].join('　');
   const time = j => sh[j] && sh[j].start ? `${fmtTime(sh[j].start)}～${fmtTime(sh[j].end)}` : '';
   const brk = j => sh[j] && sh[j].breakFrom ? `${fmtTime(sh[j].breakFrom)}～${fmtTime(sh[j].breakTo)}` : sh[j] && sh[j].breakMin ? `${sh[j].breakMin}分` : '';
   const cells = {
     AF3: dateSerial(c.juchuDate), I4: c.company.name, AB4: c.company.plant,
     I6: c.company.address, AL6: c.tanto,
     K8: `期間：（　${h.contract === '短期' ? h.contractPeriod || '短期' : h.contract || ''}　）`,
-    U8: `${p.ageMin ? p.ageMin + '～' : ''}${p.ageMax || ''}`, AF8: p.sex === '不問' ? '　男女' : `　${p.sex}`,
+    E8: mk(h.contract === '長期', '長期'), H8: mk(h.contract === '短期', '短期'),
+    U8: `${p.ageMin ? p.ageMin + '～' : ''}${p.ageMax || ''}`,
+    AF8: [mk(p.sex === '男性', '男'), mk(p.sex === '女性', '女'), mk(p.sex === '不問', '男女')].join('・'),
     E10: +p.headcount || '', M10: c.work.holidays, AE10: +h.annualHolidays || '', AL10: filled(p.overtimeH) ? +p.overtimeH : '',
-    E12: (c.facilities.checks || []).join('　'), E14: c.facilities.shokudoNote || '', K14: c.facilities.otherNote || '',
+    E12: facText, E14: c.facilities.shokudoNote || '', K14: c.facilities.otherNote || '',
     E16: +p.pay || '', U16: [p.kotsuRule && '交通費 ' + p.kotsuRule, p.kotsuCap && '上限' + yen(p.kotsuCap)].filter(Boolean).join('　'),
     A36: detailText(p), A54: h.environment, A63: [h.appeal, ...meritLines(c)].filter(Boolean).join('\n'),
   };
@@ -144,10 +196,23 @@ function cellsRingi(c) {
     cells['J' + row] = p ? (p.teate[0] || {}).name || '' : ''; cells['L' + row] = p && +(p.teate[0] || {}).pay ? +p.teate[0].pay : ''; cells['N' + row] = p && +(p.teate[0] || {}).bill ? +p.teate[0].bill : '';
     cells['P' + row] = p ? (p.teate[1] || {}).name || '' : ''; cells['R' + row] = p && +(p.teate[1] || {}).pay ? +p.teate[1].pay : ''; cells['T' + row] = p && +(p.teate[1] || {}).bill ? +p.teate[1].bill : '';
     cells['V' + row] = p && +p.kotsuCap ? `${(+p.kotsuCap).toLocaleString()}円` : '';
+    if (!(p && +p.bill && +p.pay)) cells['H' + row] = '';          // 原価率（単価が無い行は空欄）
     const jrow = 33 + i;
-    cells['D' + jrow] = p && p.jobCode ? +p.jobCode : '';
-    cells['J' + jrow] = p ? (c.company.pref || prefFromAddr(c.company.address)) : '';
+    const jc = p && p.jobCode ? +p.jobCode : '';
+    const area = p ? (c.company.pref || prefFromAddr(c.company.address)) : '';
+    cells['D' + jrow] = jc; cells['J' + jrow] = area;
+    if (!jc) { cells['F' + jrow] = ''; cells['M' + jrow] = ''; }     // 職業名・基準値
+    if (!area) cells['P' + jrow] = '';                               // 地域指数
+    if (!jc || !area) cells['R' + jrow] = '';                        // 基準値×地域指数
+    if (!jc || !area || !(p && +p.pay)) cells['U' + jrow] = '';      // 支払時給との差異
   });
+  cells.__opts = {
+    wrap: ['A39', 'A41', 'A44', 'A46', 'A48'],
+    rowHeights: {
+      39: textRowHeight(cells.A39, 58), 41: textRowHeight(cells.A41, 58),
+      44: textRowHeight(cells.A44, 58), 46: textRowHeight(cells.A46, 44), 48: textRowHeight(cells.A48, 58),
+    },
+  };
   const roles = [...appr].reverse();   // 決済・経理・管理本部・所長の並び
   ['I51', 'O51', 'R51', 'U51'].forEach((ref, i) => {
     const role = (roles[i] || {}).role; const a = role ? ap[role] : null;
@@ -165,8 +230,10 @@ function cellsSetsumei(c, pair) {
   const uni = x => (c.setsumei.uniform || []).includes(x);
   const etc = !!(c.facilities.otherNote || fac.some(x => ['自動販売機', '電子レンジ', '冷蔵庫', 'ポット', '駐車場', '喫煙所'].includes(x)));
   const months = t => (String(t || '').match(/(\d+\s*[ヶヵか]?月)/) || [])[1] || '';
-  const L = { mark: 'C11', name: 'E11', koyo: 'E12', koyoMark: 'G12', ext: 'L12', posture: ['E23', 'G23', 'J23'], breakMark: [['D26', 'F26', 'H26'], ['D28', 'F28', 'H28'], ['D30', 'F30', 'H30']], note33: 'E33', ageMin: 'E14', ageMax: 'H14', qual: 'E15', note: 'E31', holidays: 'E32', days: 'E34', monthH: 'J34', night: 'E35', ot: 'J35', nOt: 'E36', hol: 'J36', pay: 'F37', nightRate: 'E39', kotsuRule: 'E43', kotsuMonth: 'J43', kotsuCap: 'E49', shift: [['D25', 'G25', 'I25', 'K25', 'E26', 'G26'], ['D27', 'G27', 'I27', 'K27', 'E28', 'G28'], ['D29', 'G29', 'I29', 'K29', 'E30', 'G30']] };
-  const R = { mark: 'M11', name: 'O11', koyo: 'O12', koyoMark: 'Q12', ext: 'V12', posture: ['O23', 'Q23', 'T23'], breakMark: [['N26', 'P26', 'R26'], ['N28', 'P28', 'R28'], ['N30', 'P30', 'R30']], note33: 'O33', ageMin: 'O14', ageMax: 'R14', qual: 'O15', note: 'O31', holidays: 'O32', days: 'O34', monthH: 'T34', night: 'O35', ot: 'T35', nOt: 'O36', hol: 'T36', pay: 'P37', nightRate: '', kotsuRule: 'P43', kotsuMonth: '', kotsuCap: 'O49', shift: [['N25', 'Q25', 'S25', 'U25', 'O26', 'Q26'], ['N27', 'Q27', 'S27', 'U27', 'O28', 'Q28'], ['N29', 'Q29', 'S29', 'U29', 'O30', 'Q30']] };
+  const ZERO_L = ['H37', 'J37', 'H38', 'J38', 'E39', 'H39', 'J39', 'E40', 'H40', 'J40', 'E41', 'H41', 'J41', 'H43', 'J43', 'I44', 'E46', 'J46', 'E47', 'J47'];
+  const ZERO_R = ['R37', 'T37', 'R38', 'T38', 'O39', 'R39', 'T39', 'O40', 'R40', 'T40', 'O41', 'R41', 'T41', 'R43', 'T43', 'S44', 'O46', 'T46', 'O47', 'T47'];
+  const L = { mark: 'C11', name: 'E11', koyo: 'E12', koyoMark: 'G12', ext: 'L12', posture: ['E23', 'G23', 'J23'], breakMark: [['D26', 'F26', 'H26'], ['D28', 'F28', 'H28'], ['D30', 'F30', 'H30']], note33: 'E33', ageMin: 'E14', ageMax: 'H14', qual: 'E15', note: 'E31', holidays: 'E32', days: 'E34', monthH: 'J34', night: 'E35', ot: 'J35', nOt: 'E36', hol: 'J36', pay: 'F37', nightRate: 'E39', nightHours: 'H39', basicAmt: 'J37', nightAmt: 'J39', otAmt: 'J40', holAmt: 'J41', sumAmt: 'I44', kotsuRule: 'E43', kotsuMonth: 'J43', kotsuCap: 'E49', zeros: ZERO_L, shift: [['D25', 'G25', 'I25', 'K25', 'E26', 'G26'], ['D27', 'G27', 'I27', 'K27', 'E28', 'G28'], ['D29', 'G29', 'I29', 'K29', 'E30', 'G30']] };
+  const R = { mark: 'M11', name: 'O11', koyo: 'O12', koyoMark: 'Q12', ext: 'V12', posture: ['O23', 'Q23', 'T23'], breakMark: [['N26', 'P26', 'R26'], ['N28', 'P28', 'R28'], ['N30', 'P30', 'R30']], note33: 'O33', ageMin: 'O14', ageMax: 'R14', qual: 'O15', note: 'O31', holidays: 'O32', days: 'O34', monthH: 'T34', night: 'O35', ot: 'T35', nOt: 'O36', hol: 'T36', pay: 'P37', nightRate: '', nightHours: '', basicAmt: 'T37', nightAmt: 'T39', otAmt: 'T40', holAmt: 'T41', sumAmt: 'S44', kotsuRule: '', kotsuMonth: 'T43', kotsuCap: 'O49', zeros: ZERO_R, shift: [['N25', 'Q25', 'S25', 'U25', 'O26', 'Q26'], ['N27', 'Q27', 'S27', 'U27', 'O28', 'Q28'], ['N29', 'Q29', 'S29', 'U29', 'O30', 'Q30']] };
   const cells = {
     N2: '', D3: co.name, J3: co.plant, Q3: k.corp, U3: k.office ? `${k.office}営業所` : '', Q4: k.address, Q6: k.tel, Q7: k.fax,
     Q8: c.setsumei.officeTanto || c.tanto, T8: '', D5: co.address, D7: co.access, G7: '', I7: '', D9: co.description,
@@ -193,6 +260,7 @@ function cellsSetsumei(c, pair) {
       M.shift.forEach(s => s.forEach(ref => { cells[ref] = ''; }));
       M.posture.forEach(ref => { cells[ref] = ''; });
       M.breakMark.forEach(g => g.forEach(ref => { cells[ref] = ''; }));
+      M.zeros.forEach(ref => { cells[ref] = ''; });   // 職種が無い側は計算結果も空欄に
       cells[M.mark] = ''; cells[M.note33] = ''; cells[M.koyoMark] = '';
       return;
     }
@@ -210,6 +278,13 @@ function cellsSetsumei(c, pair) {
     cells[M.night] = +p.nightH || 0; cells[M.ot] = +p.overtimeH || 0; cells[M.nOt] = +p.normalOtH || 0; cells[M.hol] = +p.holidayH || 0;
     cells[M.pay] = +p.pay || ''; cells[M.kotsuCap] = +p.kotsuCap || '';
     if (M.nightRate) cells[M.nightRate] = +p.pay ? Math.round(p.pay * 0.25) : '';
+    if (M.nightHours) cells[M.nightHours] = +p.nightH || '';       // テンプレートのサンプル時間を残さない
+    if (!(+p.nightH)) cells[M.nightAmt] = '';                      // 時間が無ければ金額も空欄
+    if (!(+p.overtimeH)) cells[M.otAmt] = '';
+    if (!(+p.holidayH)) cells[M.holAmt] = '';
+    if (monthHours(p) == null) cells[M.basicAmt] = '';             // 所定時間が未入力なら金額は空欄
+    const anyAmt = (monthHours(p) != null && +p.pay) || +p.nightH || +p.overtimeH || +p.holidayH || +p.kotsuMonthly;
+    if (!anyAmt) cells[M.sumAmt] = '';                             // 金額が無ければ「計」も空欄
     if (M.kotsuRule) cells[M.kotsuRule] = p.kotsuRule || '';
     if (M.kotsuMonth) cells[M.kotsuMonth] = +p.kotsuMonthly || '';
     const sh = (p.shifts || []).filter(s => s.start);
