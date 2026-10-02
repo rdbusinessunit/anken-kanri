@@ -121,6 +121,9 @@ function addDays(s, n) { const d = dateOf(s) || new Date(); d.setDate(d.getDate(
 const surname = n => String(n || '').trim().split(/[\s　]/)[0].slice(0, 3);
 const lsGet = k => { try { return localStorage.getItem(k); } catch { return null; } };
 const lsSet = (k, v) => { try { localStorage.setItem(k, v); } catch { } };
+/* 媒体ごとに色を変えた名札（見分けやすくするため） */
+const MEDIA_TONE = { 'Indeed': 1, 'indeed': 1, '求人BOX': 2, '求人ボックス': 2, 'Airワーク': 3, 'エアワーク': 3, 'ジョブタウン': 4, 'engage': 4, 'ヒバライト': 5, 'マイナビ': 5, 'ハローワーク': 6 };
+const mtag = m => `<span class="mtag m${MEDIA_TONE[m] || 0}">${esc(m)}</span>`;
 function toast(msg, tone = '') {
   const el = document.createElement('div'); el.textContent = msg; if (tone) el.className = tone;
   $('#toast').appendChild(el); setTimeout(() => el.remove(), 3200);
