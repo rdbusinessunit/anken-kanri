@@ -13,6 +13,7 @@
   --m1:#1F5FA9; --m1-soft:#E2ECF8; --m2:#A2590F; --m2-soft:#FAEEDC; --m3:#2A7549; --m3-soft:#E1F0E6;
   --m4:#6B4A9E; --m4-soft:#EDE7F7; --m5:#13706A; --m5-soft:#DCF0EE; --m6:#8A5343; --m6-soft:#F6E8E3;
   --paper:#FFFFFF; --paper-ink:#141414; --paper-line:#3A3A3A; --paper-head:#EEF1F0; --paper-shu:#C8392D;
+  color-scheme:light;
   --r:6px;
   --shadow:0 1px 2px rgba(18,30,26,.06),0 6px 20px rgba(18,30,26,.07);
   --sans:"BIZ UDPGothic","Hiragino Sans","Yu Gothic UI","Meiryo",system-ui,sans-serif;
@@ -20,6 +21,7 @@
 }
 @media (prefers-color-scheme: dark){
   :root:not([data-theme="light"]){
+    color-scheme:dark;
     --ground:#101615; --surface:#19211F; --surface-2:#1F2927; --ink:#E2E8E5; --ink-2:#A2AEA9; --ink-3:#7C8984;
     --line:#2E3A37; --line-2:#26302E;
     --accent:#8FB4DB; --accent-ink:#0E1A26; --accent-soft:#1D2D3E;
@@ -31,6 +33,7 @@
   }
 }
 :root[data-theme="dark"]{
+  color-scheme:dark;
   --ground:#101615; --surface:#19211F; --surface-2:#1F2927; --ink:#E2E8E5; --ink-2:#A2AEA9; --ink-3:#7C8984;
   --line:#2E3A37; --line-2:#26302E;
   --accent:#8FB4DB; --accent-ink:#0E1A26; --accent-soft:#1D2D3E;
@@ -70,7 +73,10 @@ h1,h2,h3{text-wrap:balance;margin:0}
 .wrap{max-width:1320px;margin:0 auto;padding:24px 20px 120px}
 .bottomnav{display:none}
 @media (max-width:760px){
-  .nav,.brand small,.me .sync{display:none}
+  .nav,.brand small,.me .sync,.me .tlabel,.me label[for="me"]{display:none}
+  .brand b{font-size:16px}
+  .me{gap:6px}
+  .me select{padding:4px 6px;font-size:12px;max-width:112px}
   .top-in{padding:0 14px;gap:10px}
   .wrap{padding:16px 12px 150px}
   .bottomnav{display:flex;position:fixed;left:0;right:0;bottom:0;z-index:40;background:var(--surface);border-top:1px solid var(--line);padding-bottom:env(safe-area-inset-bottom)}
@@ -376,6 +382,10 @@ label.btn[for]{cursor:pointer}
 @keyframes tin{from{transform:translateY(6px);opacity:.3}to{transform:none;opacity:1}}
 </style>
 
+<script>
+/* 保存されたテーマを、画面が描かれる前に反映する */
+try { var t0 = localStorage.getItem('bring-theme'); if (t0 === 'light' || t0 === 'dark') document.documentElement.setAttribute('data-theme', t0); } catch (e) { }
+</script>
 <header class="top">
   <div class="top-in">
     <div class="brand"><b>案件管理システム</b><small>受注 → 稟議 → 求人</small></div>
@@ -385,7 +395,9 @@ label.btn[for]{cursor:pointer}
       <a href="#/postings" data-nav="postings">求人管理</a>
       <a href="#/settings" data-nav="settings">設定</a>
     </nav>
-    <div class="me"><span class="sync" id="sync">接続中</span><label for="me">入力者</label><select id="me"></select></div>
+    <div class="me"><span class="sync" id="sync">接続中</span>
+      <label for="theme" class="tlabel">表示</label><select id="theme" title="画面の明るさ（自動はお使いの端末の設定に合わせます）"><option value="auto">自動</option><option value="light">ライト</option><option value="dark">ダーク</option></select>
+      <label for="me">入力者</label><select id="me"></select></div>
   </div>
 </header>
 <div class="banner crit" id="connbar" hidden style="margin:12px auto 0;max-width:1280px"></div>
@@ -406,7 +418,7 @@ label.btn[for]{cursor:pointer}
 /* 画面の更新が利用者に届くようにする仕組み
    ・JavaScriptは5分ごとに新しいものを取りにいく
    ・version.json の版番号がこのページより新しければ、自動で読み直す */
-const APP_VERSION = "202610021632";
+const APP_VERSION = "202610021637";
 (function () {
   var files = ["config.js","ref.js","core.js","caseview.js","docs.js","postings.js","ads.js","xlsxfill.js","main.js"];
   var q = "?v=" + Math.floor(Date.now() / 300000);

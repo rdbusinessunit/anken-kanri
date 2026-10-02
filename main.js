@@ -55,6 +55,17 @@ function fillLists() {
   $('#dl-areas').innerHTML = AREA_INDEX.map(([n]) => `<option value="${esc(n)}">`).join('');
   $('#dl-jobs').innerHTML = JOB_STATS.map(([c, n]) => `<option value="${c} ${esc(n)}">`).join('');
 }
+/* ===== 表示テーマ（自動・ライト・ダーク） ===== */
+function applyTheme(v) {
+  const root = document.documentElement;
+  if (v === 'light' || v === 'dark') root.setAttribute('data-theme', v); else root.removeAttribute('data-theme');
+}
+function initTheme() {
+  const sel = $('#theme'); if (!sel) return;
+  const v = lsGet('bring-theme') || 'auto';
+  sel.value = v; applyTheme(v);
+  sel.addEventListener('change', () => { lsSet('bring-theme', sel.value); applyTheme(sel.value); toast(`表示を「${sel.options[sel.selectedIndex].text}」にしました`); });
+}
 function renderMe() {
   const sel = $('#me'); const opts = [...new Set([...cfg().staff, S.me].filter(Boolean))];
   const html = `<option value="">選択…</option>${opts.map(s => `<option${s === S.me ? ' selected' : ''}>${esc(s)}</option>`).join('')}<option value="__other">その他（名前を入力）</option>`;
@@ -260,4 +271,4 @@ document.addEventListener('click', e => {
 });
 
 /* ===== 起動 ===== */
-renderMe(); render(); Store.start();
+initTheme(); renderMe(); render(); Store.start();
