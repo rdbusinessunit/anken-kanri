@@ -254,6 +254,9 @@ function extractPeriod(filename) {
   if (kb) return { start: `${kb[1]}-${kb[2]}-${kb[3]}`, date: `${kb[4]}-${kb[5]}-${kb[6]}` };
   const aw = filename.match(/(\d{4})(\d{2})(\d{2})_\d{6}\.csv$/i);
   if (aw) return { start: null, date: `${aw[1]}-${aw[2]}-${aw[3]}` };
+  /* 採用ボードの求人一覧: saiyoboard_kyujin_202608031618.csv(日付8桁＋時刻4桁) */
+  const kbl = filename.match(/_(\d{4})(\d{2})(\d{2})\d{4}\.csv$/i);
+  if (kbl) return { start: null, date: `${kbl[1]}-${kbl[2]}-${kbl[3]}` };
   return { start: null, date: todayStr() };
 }
 
@@ -290,10 +293,24 @@ function resolveBranch(sourceId, branchId) {
 /* ヘッダーの列名から媒体を判定する(ボタンを押し間違えても正しく取り込めるように) */
 function detectSource(row) {
   if (!row) return null;
+  if (isKbList(row)) return null;
   if ("求人タイトル" in row || "表示回数" in row) return "kyujinbox";
   if ("求人内容" in row || "表示数" in row) return "airwork";
   return null;
 }
+/* 求人ボックス 採用ボードの「求人一覧」CSV。実績は入っていないのでこのボードでは使わないが、
+   案件管理が案件を分けるのに必要なので、受け取って渡すだけする。 */
+function isKbList(row) {
+  return !!row && "求人ID" in row && "勤務地_詳細_1" in row;
+}
+
+/* 案件管理に渡す列。案件管理側の処理をそのまま動かせるよう、列名は変えずに絞るだけ。 */
+const FEED_COLS = {
+  indeed: ["求人番号", "求人メモ", "求人内容", "表示数", "クリック数", "応募数", "利用済予算"],
+  kbreport: ["求人番号", "ステータス", "勤務先名", "表示回数", "クリック数", "応募数", "費用"],
+  kblist: ["求人ID", "求人ステータス", "勤務先名", "求人タイトル", "勤務地_県_1", "勤務地_詳細_1", "給与（下限）", "応募受付の電話番号", "求人ラベル"],
+};
+const pickCols = (rows, cols) => rows.map((r) => { const o = {}; cols.forEach((c) => { o[c] = r[c] ?? ""; }); return o; });
 function extractCompany(memo) {
   if (!memo) return "";
   const tokens = memo.split(/[\s\u3000]+/).map((t) => t.trim()).filter(Boolean);
@@ -587,6 +604,11 @@ function JobAdDashboard() {
      拠点ボタンからの取り込みでも、まとめて取り込みでも、ここを通る。 */
   async function prepareFile(file, fallbackSource, fallbackBranch) {
     const rows = Papa.parse(await readCsvText(file), { header: true, skipEmptyLines: true }).data;
+    /* 求人一覧CSVは案件管理に渡すだけ。このボードの実績データにはならない */
+    if (isKbList(rows[0])) {
+      return { name: file.name, rows, kind: "kblist", source: null, account: "", branch: "",
+               period: extractPeriod(file.name), count: rows.length };
+    }
     /* 列名から媒体を判定するので、ボタンを押し間違えても正しく取り込める */
     const source = detectSource(rows[0]) || fallbackSource || null;
     if (!source) return null;
@@ -597,7 +619,7 @@ function JobAdDashboard() {
       ? (fallbackBranch ? resolveBranch(source, fallbackBranch) : (adAccounts[account] || ""))
       /* 求人BOXは1ファイルに全拠点入っていて勤務先名で振り分けるため、ここでは既定値だけ持つ */
       : resolveBranch(source, fallbackBranch || branchesOf(source)[0].id);
-    return { name: file.name, rows, source, account, branch: guessed, period: extractPeriod(file.name), count: rows.length };
+    return { name: file.name, rows, kind: source, source, account, branch: guessed, period: extractPeriod(file.name), count: rows.length };
   }
 
   /* 判定済みの1ファイルを jobs に反映する */
@@ -671,16 +693,48 @@ function JobAdDashboard() {
     if (out.length) setQueue(out);
   }
 
+  /* 案件管理が同じCSVを取り込み直さずに済むよう、必要な列だけを渡し場に置く。
+     案件管理の取込画面から「ダッシュボードの取り込みを読み込む」で拾う。 */
+  async function saveFeeds(list) {
+    const stamp = { importedAt: new Date().toISOString() };
+    const puts = [];
+    list.filter((p) => p.kind === "airwork").forEach((p) => {
+      puts.push(["feed-indeed-" + p.branch, { ...stamp, type: "Indeed", kyoten: p.branch, account: p.account,
+        source: p.name, period: p.period, rows: pickCols(p.rows, FEED_COLS.indeed) }]);
+    });
+    const kbr = list.filter((p) => p.kind === "kyujinbox");
+    if (kbr.length) {
+      const p = kbr[kbr.length - 1];
+      puts.push(["feed-kbreport", { ...stamp, type: "KBREPORT", source: p.name, period: p.period,
+        rows: pickCols(p.rows, FEED_COLS.kbreport) }]);
+    }
+    const kbl = list.filter((p) => p.kind === "kblist");
+    if (kbl.length) {
+      const p = kbl[kbl.length - 1];
+      puts.push(["feed-kblist", { ...stamp, type: "KBLIST", source: p.name, period: p.period,
+        rows: pickCols(p.rows, FEED_COLS.kblist) }]);
+    }
+    for (const [id, data] of puts) await sbDocPut("board", id, data);
+    return puts.length;
+  }
+
   async function runQueue() {
     const acc = newAcc();
     let saveError = null;
     for (const p of queue) {
+      if (p.kind === "kblist") continue;
       setQueueBusy(`${p.name} を取り込んでいます…`);
       try { await applyFile(p, acc); }
       catch (e) {
         saveError = `画面には反映しましたが、Supabaseへの保存に失敗しました。再読み込みすると取り込んだ内容は消えます。${describeError(e)}`;
         break;
       }
+    }
+    /* 案件管理用の渡し場。ここが失敗しても、このボードの取り込みは成立している */
+    if (!saveError) {
+      setQueueBusy("案件管理へ渡す準備をしています…");
+      try { await saveFeeds(queue); }
+      catch (e) { showToast(`案件管理へ渡す準備に失敗しました。案件管理では従来どおりCSVを選んでください。${describeError(e)}`, "error"); }
     }
     /* 今回選んだ「アカウント→拠点」を覚えて、次回から自動で割り当てる */
     const nextMap = { ...adAccounts };
@@ -701,7 +755,9 @@ function JobAdDashboard() {
     setQueueBusy("");
     if (saveError) { showToast(saveError, "error"); return; }
     setQueue(null);
-    importToast(acc, `${queue.length}ファイルから`);
+    const kbl = queue.filter((p) => p.kind === "kblist").length;
+    importToast(acc, `${queue.length - kbl}ファイルから`);
+    if (kbl && !acc.totalRows) showToast(`求人一覧CSVを案件管理へ渡しました（このボードの実績には影響しません）`);
   }
 
   function newAcc() { return { totalRows: 0, newJobs: 0, revisedJobs: 0, skippedRows: 0, branchCounts: {} }; }
@@ -1026,12 +1082,14 @@ function JobAdDashboard() {
             <tbody>
               {queue.map((p, i) => (
                 <tr key={i}>
-                  <td><span className="jad-queue-tag">{SOURCE_BY_ID[p.source].label}</span></td>
+                  <td><span className="jad-queue-tag">{p.kind === "kblist" ? "求人一覧" : SOURCE_BY_ID[p.source].label}</span></td>
                   <td className="jad-queue-name">{p.name}</td>
                   <td className="jad-queue-sub">{p.period.start ? `${p.period.start}〜${p.period.date}` : p.period.date}</td>
                   <td className="c-num">{fmtInt(p.count)}</td>
                   <td>
-                    {p.source === "kyujinbox" ? (
+                    {p.kind === "kblist" ? (
+                      <span className="jad-queue-sub">案件管理へ渡すだけ</span>
+                    ) : p.kind === "kyujinbox" ? (
                       <span className="jad-queue-sub">勤務先名から自動</span>
                     ) : (
                       <select value={p.branch}

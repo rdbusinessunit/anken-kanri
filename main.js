@@ -253,6 +253,7 @@ const ACT = {
   async retry(b) { b.disabled = true; b.textContent = '接続しています…'; await Store.refresh(); rerender(); },
   impdrop(b) { const I = impState(); I.files.splice(+b.dataset.i, 1); I.v++; rerender(); },
   impsave: () => impSave(),
+  impfeed: () => loadBoardFeeds(),
   kbnamesave: () => kbNameSave(),
   kbai() { if (!needMe()) kbAI(); },
   adsort(b) { S.adf.sort = b.dataset.v; rerender(); },

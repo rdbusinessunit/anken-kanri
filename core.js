@@ -198,7 +198,10 @@ const Store = {
   },
   // 更新日時が変わった行だけ本文を読み直す。変化があれば true
   async pull() {
-    const list = await this.listVersions();
+    /* この画面が使う種類だけ読む。成績ボードが置く coll='board'(CSVの受け渡し用で
+       1件1MB近くなる)まで毎回読むと、起動が重くなるため。 */
+    const MINE = new Set(['cases', 'postings', 'ads', 'config', 'stats']);
+    const list = (await this.listVersions()).filter(r => MINE.has(r.coll));
     const seen = new Set(); const need = {};
     list.forEach(r => { const k = r.coll + '/' + r.id; seen.add(k); if (this.ver[k] !== r.updated_at) (need[r.coll] = need[r.coll] || []).push(r.id); });
     const gone = Object.keys(this.ver).filter(k => !seen.has(k));

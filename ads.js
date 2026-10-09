@@ -221,6 +221,45 @@ async function loadAdFiles(fileList) {
   if (bad.length) toast('種類を判定できないファイルがあります：' + bad.join('、'), 'warn');
   rerender();
 }
+/* 成績ボードで取り込んだCSVを、ファイルを選び直さずに受け取る。
+   ボードが coll='board' の feed-* に必要な列だけ置いているので、
+   ここから先はCSVを読んだときとまったく同じ流れに乗せる。 */
+async function loadBoardFeeds() {
+  const I = impState();
+  I.busy = '成績ボードの取り込みを読み込んでいます…'; rerender();
+  try {
+    const rows = await Store.req('anken_docs?select=id,data&coll=eq.board&id=like.feed-%2A');
+    const feeds = (rows || []).map(r => r.data).filter(d => d && d.type && (d.rows || []).length);
+    if (!feeds.length) {
+      I.busy = ''; rerender();
+      toast('成績ボードで取り込んだデータが見つかりません。先にボードでCSVを取り込んでください。', 'warn');
+      return;
+    }
+    feeds.forEach(d => {
+      const entry = {
+        name: `${d.source || '成績ボード'}（成績ボードから）`, type: d.type, period: periodText(d.period),
+        account: d.account || '', count: d.rows.length, fromBoard: true,
+      };
+      if (d.type === 'Indeed') { entry.rows = d.rows; entry.kyoten = d.kyoten || 'plus-i'; }
+      if (d.type === 'KBLIST') entry.list = kbListCompact(d.rows);
+      if (d.type === 'KBREPORT') entry.report = kbReportCompact(d.rows);
+      const same = I.files.findIndex(x => x.type === entry.type && (entry.type !== 'Indeed' || x.account === entry.account));
+      if (same >= 0) I.files[same] = entry; else I.files.push(entry);
+    });
+    I.busy = ''; I.v++; rerender();
+    toast(`${feeds.length}件を読み込みました。内容を確認して取り込んでください。`);
+  } catch (e) {
+    console.error(e); I.busy = ''; rerender();
+    toast('読み込めませんでした：' + describeError(e), 'warn');
+  }
+}
+/* ボードは期間を {start,date} で持つので、この画面の表記に合わせる */
+function periodText(p) {
+  if (!p) return '';
+  if (typeof p === 'string') return p;
+  return p.start ? `${fmtD(p.start)}〜${fmtMD(p.date)}` : `${fmtD(p.date)}取得`;
+}
+
 function impParse() {
   const I = impState();
   if (I.cache && I.cache.v === I.v) return I.cache;
@@ -239,7 +278,7 @@ function viewAds() {
   const current = docs.length ? `<table class="list" style="margin-top:10px"><thead><tr><th>媒体</th><th>拠点</th><th>元ファイル</th><th>期間</th><th style="text-align:right">公開中の求人</th><th>取込</th></tr></thead><tbody>${docs.map(d => `<tr><td>${mtag(d.media)}</td><td>${esc(d.kyoten || '全拠点')}</td><td class="small">${esc((d.sources || [d.source]).filter(Boolean).join(' ＋ '))}</td><td class="small">${esc(d.period || '')}</td><td class="n" style="text-align:right">${d.media === 'Indeed' ? d.tot.n : sum(Object.values(d.byKyoten || {}).map(v => v.n))}</td><td class="small muted">${fmtDT(d.importedAt)} ${esc(d.importedBy || '')}</td></tr>`).join('')}</tbody></table>` : '<p class="small muted" style="margin:8px 0 0">まだ取り込まれていません。</p>';
   return `<div class="pagehead"><div><div class="eyebrow">AD DATA</div><h1>求人広告の取込</h1></div><span class="sub">Indeed・求人ボックスの求人数と実績を案件別にまとめます</span><span class="spacer"></span><a class="btn ghost" href="#/postings">← 求人管理</a></div>
   <div class="panel" style="padding:16px 18px;margin-bottom:18px">
-    <div class="row"><label class="btn primary" for="adsin" tabindex="0">CSVファイルを選ぶ</label><input type="file" id="adsin" accept=".csv,text/csv" multiple hidden><span class="small muted">${I.busy ? esc(I.busy) : '複数まとめて選べます。種類と文字コードは中身から自動で判定します。'}</span></div>
+    <div class="row"><button class="btn primary" data-act="impfeed"${I.busy ? ' disabled' : ''}>成績ボードの取り込みを読み込む</button><label class="btn ghost" for="adsin" tabindex="0">CSVファイルを選ぶ</label><input type="file" id="adsin" accept=".csv,text/csv" multiple hidden><span class="small muted">${I.busy ? esc(I.busy) : '成績ボードでCSVを取り込んでいれば、ファイルを選び直さずにそのまま使えます。'}</span></div>
     <ul class="small muted" style="margin:10px 0 0;padding-left:18px;line-height:1.8">
       <li><b>Indeed</b>：広告配信実績（求人ごと）のCSV。求人メモ先頭の番号と名称で案件を分けます。</li>
       <li><b>求人ボックス</b>：採用ボードの<b>求人一覧CSV</b>（saiyoboard_kyujin_…）と、管理画面の<b>求人別CSV</b>（…_求人別_開始日_終了日）を一緒に選んでください。求人一覧で案件を分け、求人別で表示・クリック・応募を付けます。</li>
