@@ -393,6 +393,8 @@ try { var t0 = localStorage.getItem('bring-theme'); if (t0 === 'light' || t0 ===
       <a href="#/cases" data-nav="cases">案件一覧</a>
       <a href="#/new" data-nav="new">新規受注</a>
       <a href="#/postings" data-nav="postings">求人管理</a>
+      <!-- 成績優先度ボードは別ページ。作りが違う(React)ため同じページには載せられない -->
+      <a href="./board/">成績ボード</a>
       <a href="#/settings" data-nav="settings">設定</a>
     </nav>
     <div class="me"><span class="sync" id="sync">接続中</span>
@@ -407,6 +409,7 @@ try { var t0 = localStorage.getItem('bring-theme'); if (t0 === 'light' || t0 ===
   <a href="#/cases" data-nav="cases"><b>≡</b>案件</a>
   <a href="#/new" data-nav="new"><b>＋</b>新規受注</a>
   <a href="#/postings" data-nav="postings"><b>▤</b>求人</a>
+  <a href="./board/"><b>★</b>成績</a>
   <a href="#/settings" data-nav="settings"><b>⚙</b>設定</a>
 </nav>
 <div id="toast" aria-live="polite"></div>

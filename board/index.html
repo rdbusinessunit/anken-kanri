@@ -1,0 +1,1415 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>求人広告 運用ダッシュボード</title>
+
+<!-- React / ReactDOM (このリポジトリに同梱。外部CDNには依存しません) -->
+<script src="./vendor/react.production.min.js"></script>
+<script src="./vendor/react-dom.production.min.js"></script>
+<!-- Babel (JSXをブラウザ上でそのまま実行するため) -->
+<script src="./vendor/babel.min.js"></script>
+<!-- CSVパース -->
+<script src="./vendor/papaparse.min.js"></script>
+<!-- グラフ (Recharts はPropTypes / D3系ライブラリに依存) -->
+<script src="./vendor/prop-types.min.js"></script>
+<script src="./vendor/recharts.js"></script>
+
+<style>
+  html, body { margin: 0; background: #EEF1EE; }
+  #root { max-width: 1180px; margin: 0 auto; padding: 24px 16px; }
+</style>
+</head>
+<body>
+<div id="root">
+  <div style="padding:40px;text-align:center;font-family:sans-serif;color:#5C6660;">読み込み中…</div>
+</div>
+
+<script type="text/babel" data-presets="react">
+
+/* ==================================================================
+   Supabase 接続設定
+   ここが空だと動きません。必ずプロジェクトのURLとpublishable keyを
+   入れてください(Supabase Dashboard > Settings > API)。
+================================================================== */
+
+const SUPABASE_URL = "https://wmxsuggeudkxewjhczam.supabase.co";
+const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6IndteHN1Z2dldWRreGV3amhjemFtIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODc2MzYyNTEsImV4cCI6MjEwMzIxMjI1MX0.8c0uRXyDZ_vB04vQTQKynTcEGRNnXPmTgBsWcEYpPWw";
+
+async function sbFetch(path, options = {}) {
+  const res = await fetch(`${SUPABASE_URL}/rest/v1/${path}`, {
+    ...options,
+    headers: {
+      "apikey": SUPABASE_KEY,
+      "Authorization": `Bearer ${SUPABASE_KEY}`,
+      "Content-Type": "application/json",
+      ...(options.headers || {}),
+    },
+  });
+  if (!res.ok) {
+    const text = await res.text().catch(() => "");
+    throw new Error(`Supabase error ${res.status}: ${text}`);
+  }
+  if (res.status === 204) return null;
+  const text = await res.text();
+  return text ? JSON.parse(text) : null;
+}
+
+/* 失敗の理由を日本語にする。「失敗しました」だけだと、接続先が落ちているのか
+   設定の問題なのか切り分けられず、原因を探すのに時間がかかるため。 */
+function describeError(e) {
+  const msg = String((e && e.message) || e);
+  if (/Failed to fetch|NetworkError|ERR_NAME_NOT_RESOLVED|Load failed/i.test(msg)) {
+    return "Supabaseに接続できません。プロジェクトが一時停止している可能性があります"
+         + "(無料プランは一定期間アクセスがないと自動で停止します)。"
+         + "Supabaseのダッシュボードを開き、一時停止中なら再開ボタン"
+         + "(日本語表示では「履歴書プロジェクト」と誤訳されています)を押してください。";
+  }
+  const m = msg.match(/Supabase error (\d{3})/);
+  if (m) {
+    const code = m[1];
+    if (code === "401" || code === "403") return `Supabaseに接続を拒否されました(${code})。接続キーかテーブルのポリシー設定を確認してください。`;
+    if (code === "404") return `jobsテーブルが見つかりません(404)。setup.sql を実行してください。`;
+    if (code === "413") return `一度に送るデータが大きすぎます(413)。`;
+    if (code === "429") return `リクエストが多すぎます(429)。少し待ってからやり直してください。`;
+    if (code.charAt(0) === "5") return `Supabase側でエラーが起きています(${code})。少し待ってからやり直してください。`;
+    return `Supabaseがエラーを返しました(${code})。`;
+  }
+  return msg;
+}
+
+/* ==================================================================
+   React / ライブラリ参照
+================================================================== */
+
+const { useState, useEffect, useMemo, useRef, useCallback } = React;
+const {
+  LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip: RTooltip,
+  ReferenceLine, ResponsiveContainer, Legend,
+} = Recharts;
+const Papa = window.Papa;
+
+/* ==================================================================
+   簡易アイコンコンポーネント(lucide-react の代わり)
+================================================================== */
+
+function mkIcon(children, viewBox = "0 0 24 24") {
+  return function Icon({ size = 16, className = "" }) {
+    return (
+      <svg width={size} height={size} viewBox={viewBox} fill="none" stroke="currentColor"
+           strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>
+        {children}
+      </svg>
+    );
+  };
+}
+const Upload = mkIcon(<>
+  <path d="M12 16V4" /><path d="M6 10l6-6 6 6" /><path d="M4 20h16" />
+</>);
+const AlertTriangle = mkIcon(<>
+  <path d="M12 3l10 18H2z" /><path d="M12 10v4" /><path d="M12 17.5v.01" />
+</>);
+const TrendingDown = mkIcon(<>
+  <path d="M3 7l7 7 4-4 7 7" /><path d="M21 10v7h-7" />
+</>);
+const TrendingUp = mkIcon(<>
+  <path d="M3 17l7-7 4 4 7-7" /><path d="M21 7v7h-7" />
+</>);
+const Calendar = mkIcon(<>
+  <rect x="3" y="5" width="18" height="16" rx="2" /><path d="M3 10h18" /><path d="M8 3v4" /><path d="M16 3v4" />
+</>);
+const X = mkIcon(<>
+  <path d="M6 6l12 12" /><path d="M18 6L6 18" />
+</>);
+const Check = mkIcon(<path d="M4 12l6 6 10-12" />);
+const ChevronRight = mkIcon(<path d="M9 5l7 7-7 7" />);
+const ChevronLeft = mkIcon(<path d="M15 5l-7 7 7 7" />);
+const RotateCcw = mkIcon(<>
+  <path d="M3 11a9 9 0 1 1 2.6 6.3" /><path d="M3 4v7h7" />
+</>);
+const Building2 = mkIcon(<>
+  <rect x="4" y="3" width="10" height="18" /><path d="M14 8h6v13" />
+  <path d="M8 7h.01" /><path d="M8 11h.01" /><path d="M8 15h.01" />
+</>);
+const Loader2 = mkIcon(<path d="M21 12a9 9 0 1 1-9-9" />);
+const FileText = mkIcon(<>
+  <path d="M6 2h8l4 4v16H6z" /><path d="M14 2v4h4" /><path d="M8 12h8" /><path d="M8 16h8" />
+</>);
+const Download = mkIcon(<>
+  <path d="M12 4v12" /><path d="M6 12l6 6 6-6" /><path d="M4 20h16" />
+</>);
+const UploadCloud = mkIcon(<>
+  <path d="M8 17a4 4 0 0 1-1-7.9A5 5 0 0 1 17 8a4 4 0 0 1-1 7.9" />
+  <path d="M12 12v7" /><path d="M9 16l3-3 3 3" />
+</>);
+
+/* ==================================================================
+   定数・ユーティリティ (Claudeアーティファクト版と同じロジック)
+================================================================== */
+
+/* 媒体(ソース)定義。
+   媒体は job_id の接頭辞で判別する(Supabaseのテーブル定義は変更不要)。
+   - エアワーク: 求人番号をそのまま job_id に使う(既存データとの互換のため接頭辞なし)
+   - 求人ボックス: "kb:" を付けて求人番号の衝突を防ぐ */
+const SOURCES = [
+  {
+    id: "airwork",
+    label: "エアワーク",
+    fileHint: "「求人ごとの配信実績」CSV",
+    /* エアワークのアカウント単位。ここに足すと取り込みボタンと拠点タブが増える */
+    branches: [
+      { id: "plus-i", label: "plus-i" },
+      { id: "plus-c", label: "plus-c" },
+      { id: "next", label: "next" },
+      { id: "up", label: "up" },
+      { id: "plus相互", label: "plus相互" },
+      { id: "next相互", label: "next相互" },
+      { id: "up相互", label: "up相互" },
+    ],
+  },
+  {
+    id: "kyujinbox",
+    label: "求人BOX",
+    fileHint: "「求人別」レポートCSV",
+    branches: [
+      { id: "plus", label: "plus" },
+      { id: "next", label: "next" },
+      { id: "up", label: "up" },
+    ],
+  },
+];
+const SOURCE_BY_ID = {};
+SOURCES.forEach((s) => { SOURCE_BY_ID[s.id] = s; });
+
+function sourceOf(jobId) { return String(jobId).startsWith("kb:") ? "kyujinbox" : "airwork"; }
+function branchesOf(sourceId) { return (SOURCE_BY_ID[sourceId] || SOURCES[0]).branches; }
+/* 画面に出す求人番号(kb: を外した元のID) */
+function displayJobId(jobId) { return String(jobId).replace(/^kb:/, ""); }
+
+const REMINDER_DAYS = [10, 20, 30];
+
+/* エアワーク「求人ごとの配信実績」CSVの列名 */
+const AW_COL_MAP = {
+  "表示数": "impressions",
+  "クリック率": "ctr",
+  "クリック数": "clicks",
+  "応募開始率": "applyStartRate",
+  "応募開始数": "applyStart",
+  "応募完了率": "applyCompleteRate",
+  "応募数": "applies",
+  "応募率": "applyRate",
+  "クリック単価": "cpc",
+  "応募開始単価": "costPerApplyStart",
+  "応募単価": "costPerApply",
+  "利用済予算": "budgetUsed",
+};
+
+/* 求人ボックス「求人別」レポートCSVの列名。
+   応募開始数・応募完了率にあたる指標は求人ボックス側に存在しない。 */
+const KB_COL_MAP = {
+  "表示回数": "impressions",
+  "クリック数": "clicks",
+  "クリック率": "ctr",
+  "平均クリック単価": "cpc",
+  "費用": "budgetUsed",
+  "応募数": "applies",
+  "アクション数": "actions",
+  "応募率": "applyRate",
+  "応募単価": "costPerApply",
+};
+
+function cleanNum(v) {
+  if (v === null || v === undefined) return 0;
+  const n = parseFloat(String(v).replace(/[¥￥%,\s]/g, ""));
+  return Number.isFinite(n) ? n : 0;
+}
+function todayStr() { return new Date().toISOString().slice(0, 10); }
+function toDate(iso) { return new Date(iso + "T00:00:00"); }
+function daysBetween(a, b) { return Math.round((a.getTime() - b.getTime()) / 86400000); }
+function fmtInt(n) { return Math.round(n).toLocaleString("ja-JP"); }
+function fmtPct(n) {
+  if (n === null || n === undefined || !Number.isFinite(n)) return "—";
+  return n.toFixed(2) + "%";
+}
+/* ファイル名から取り込み日(スナップショット日)を割り出す。
+   エアワーク  : ..._YYYYMMDD_HHMMSS.csv   → 出力日
+   求人ボックス: ..._YYYYMMDD_YYYYMMDD.csv → 集計期間の開始日と終了日 */
+function extractPeriod(filename) {
+  const kb = filename.match(/_(\d{4})(\d{2})(\d{2})_(\d{4})(\d{2})(\d{2})\.csv$/i);
+  if (kb) return { start: `${kb[1]}-${kb[2]}-${kb[3]}`, date: `${kb[4]}-${kb[5]}-${kb[6]}` };
+  const aw = filename.match(/(\d{4})(\d{2})(\d{2})_\d{6}\.csv$/i);
+  if (aw) return { start: null, date: `${aw[1]}-${aw[2]}-${aw[3]}` };
+  return { start: null, date: todayStr() };
+}
+
+/* エアワークはUTF-8(BOM付き)、求人ボックスはShift_JISで出力されるため、
+   バイト列を見て文字コードを判定してから読む。 */
+async function readCsvText(file) {
+  const buf = await file.arrayBuffer();
+  const bytes = new Uint8Array(buf);
+  if (bytes[0] === 0xef && bytes[1] === 0xbb && bytes[2] === 0xbf) {
+    return new TextDecoder("utf-8").decode(buf);
+  }
+  try {
+    return new TextDecoder("utf-8", { fatal: true }).decode(buf);
+  } catch (e) {
+    return new TextDecoder("shift_jis").decode(buf);
+  }
+}
+
+/* 押したボタンの拠点を、実際に取り込む媒体の拠点に読み替える。
+   例: エアワークの「plus-i」ボタンに求人BOXのCSVを入れた場合は「plus」にする。
+   そのままだとタブに存在しない拠点が生まれ、求人が一覧から消えてしまう。 */
+function resolveBranch(sourceId, branchId) {
+  const branches = branchesOf(sourceId);
+  if (branches.some((b) => b.id === branchId)) return branchId;
+  const near = branches.find((b) => branchId.startsWith(b.id) || b.id.startsWith(branchId));
+  return (near || branches[0]).id;
+}
+
+/* ヘッダーの列名から媒体を判定する(ボタンを押し間違えても正しく取り込めるように) */
+function detectSource(row) {
+  if (!row) return null;
+  if ("求人タイトル" in row || "表示回数" in row) return "kyujinbox";
+  if ("求人内容" in row || "表示数" in row) return "airwork";
+  return null;
+}
+function extractCompany(memo) {
+  if (!memo) return "";
+  const tokens = memo.split(/[\s\u3000]+/).map((t) => t.trim()).filter(Boolean);
+  if (tokens.length === 0) return "";
+  if (tokens.length === 1) return tokens[0];
+  return /^\d+$/.test(tokens[0]) ? (tokens[1] || tokens[0]) : tokens[0];
+}
+
+/* CSVの1行を共通の形に変換する。
+   null を返した行は無視、"skip" を返した行は「意図的に取り込まない行」。 */
+function parseAirworkRow(row, fallbackBranch) {
+  const id = row["求人番号"];
+  if (!id || String(id).trim() === "合計") return null;
+  const stats = {};
+  Object.entries(AW_COL_MAP).forEach(([jp, key]) => { stats[key] = cleanNum(row[jp]); });
+  const memo = (row["求人メモ"] || "").trim();
+  return {
+    jobId: String(id).trim(),
+    branch: fallbackBranch,
+    title: (row["求人内容"] || "").trim(),
+    memo,
+    company: extractCompany(memo),
+    employmentType: (row["雇用形態"] || "").trim(),
+    stats,
+  };
+}
+
+/* 求人ボックスのCSVは plus / next / up が1ファイルにまとまって出力されるため、
+   「勤務先名」から拠点を振り分ける。判定できない行だけボタンで選んだ拠点に入れる。 */
+function kbBranch(workplaceName, fallbackBranch) {
+  const s = workplaceName || "";
+  if (s.includes("next")) return "next";
+  if (s.includes("up")) return "up";
+  if (s.includes("plus")) return "plus";
+  return fallbackBranch;
+}
+function parseKyujinboxRow(row, fallbackBranch) {
+  const id = row["求人番号"];
+  if (!id || String(id).trim() === "合計") return null;
+  const status = (row["ステータス"] || "").trim();
+  if (status === "募集停止") return "skip";
+  const stats = {};
+  Object.entries(KB_COL_MAP).forEach(([jp, key]) => { stats[key] = cleanNum(row[jp]); });
+  const workplace = (row["勤務先名"] || "").trim();
+  const memo = [(row["勤務地"] || "").trim(), workplace, (row["キャンペーン名"] || "").trim()]
+    .filter(Boolean).join(" ・ ");
+  return {
+    jobId: "kb:" + String(id).trim(),
+    branch: kbBranch(workplace, fallbackBranch),
+    title: (row["求人タイトル"] || "").trim(),
+    memo,
+    /* 求人ボックスのCSVに顧客企業名は含まれないため、企業名は詳細画面で手入力する */
+    company: "",
+    employmentType: (row["雇用形態"] || "").trim(),
+    status,
+    stats,
+  };
+}
+function nextReminder(today = new Date()) {
+  const day = today.getDate();
+  const isToday = REMINDER_DAYS.includes(day);
+  let daysUntil = null;
+  if (!isToday) {
+    const upcoming = REMINDER_DAYS.find((d) => d > day);
+    if (upcoming) {
+      daysUntil = upcoming - day;
+    } else {
+      const nextMonth = new Date(today.getFullYear(), today.getMonth() + 1, 10);
+      daysUntil = daysBetween(nextMonth, today);
+    }
+  }
+  return { isToday, daysUntil };
+}
+
+/* 2つの取り込み時点のあいだに増えたクリック数。
+   エアワークは掲載開始からの累計なので単純な差分でよいが、求人ボックスは
+   「集計期間の合計」なので、期間の起点が変わった取り込み同士では差分を取らず、
+   その期間の値をそのまま増分として扱う。 */
+function clicksDelta(job, fromD, toD) {
+  const a = job.snapshots[fromD], b = job.snapshots[toD];
+  if (!b) return 0;
+  if (!a) return b.clicks;
+  const sameWindow = (a.periodStart || null) === (b.periodStart || null);
+  return sameWindow ? Math.max(b.clicks - a.clicks, 0) : b.clicks;
+}
+
+function deriveJobMetrics(job, today = new Date()) {
+  const snapDates = Object.keys(job.snapshots || {}).sort();
+  if (snapDates.length === 0) {
+    return { snapDates, latest: null, latestDate: null, lastRevision: null, elapsedDays: null, clicksPerDaySinceRevision: null, preAvgClicksPerDay: null, postAvgClicksPerDay: null, changePct: null };
+  }
+  const latestDate = snapDates[snapDates.length - 1];
+  const latest = job.snapshots[latestDate];
+  const revisions = [...(job.revisions || [])].sort();
+  const lastRevision = revisions.length ? revisions[revisions.length - 1] : null;
+
+  let elapsedDays = null, clicksPerDaySinceRevision = null, preAvgClicksPerDay = null, postAvgClicksPerDay = null, changePct = null;
+
+  if (lastRevision) {
+    elapsedDays = Math.max(daysBetween(today, toDate(lastRevision)), 0);
+    const preDatesAll = snapDates.filter((d) => d < lastRevision);
+    const postDatesAll = snapDates.filter((d) => d >= lastRevision);
+    const baselineDate = preDatesAll.length ? preDatesAll[preDatesAll.length - 1] : null;
+
+    if (postDatesAll.length) {
+      const postLatestDate = postDatesAll[postDatesAll.length - 1];
+      const baseDateForAvg = baselineDate || postDatesAll[0];
+      const deltaClicks = clicksDelta(job, baseDateForAvg, postLatestDate);
+      const deltaDays = Math.max(daysBetween(toDate(postLatestDate), toDate(baseDateForAvg)), 1);
+      postAvgClicksPerDay = deltaClicks / deltaDays;
+      clicksPerDaySinceRevision = elapsedDays > 0 ? deltaClicks / elapsedDays : postAvgClicksPerDay;
+    }
+    if (baselineDate && preDatesAll.length >= 2) {
+      const prevDate = preDatesAll[preDatesAll.length - 2];
+      const deltaClicks = clicksDelta(job, prevDate, baselineDate);
+      const deltaDays = Math.max(daysBetween(toDate(baselineDate), toDate(prevDate)), 1);
+      preAvgClicksPerDay = deltaClicks / deltaDays;
+    }
+    if (preAvgClicksPerDay !== null && preAvgClicksPerDay > 0 && postAvgClicksPerDay !== null) {
+      changePct = ((postAvgClicksPerDay - preAvgClicksPerDay) / preAvgClicksPerDay) * 100;
+    }
+  }
+  return { snapDates, latest, latestDate, lastRevision, elapsedDays, clicksPerDaySinceRevision, preAvgClicksPerDay, postAvgClicksPerDay, changePct };
+}
+
+/* Supabase(PostgREST)は1回のGETで最大1000件しか返さない。
+   ページングしないと、それを超えた分が画面に出てこない。 */
+async function fetchAllJobRows() {
+  const PAGE = 1000;
+  const rows = [];
+  for (let from = 0; ; from += PAGE) {
+    let page;
+    try {
+      page = await sbFetch("jobs?select=*&order=job_id", {
+        headers: { "Range-Unit": "items", "Range": `${from}-${from + PAGE - 1}` },
+      });
+    } catch (e) {
+      /* 総件数がちょうどPAGEの倍数だと、最後に範囲外を要求して416が返る */
+      if (String(e.message).includes("416")) break;
+      throw e;
+    }
+    const list = page || [];
+    rows.push(...list);
+    if (list.length < PAGE) break;
+  }
+  return rows;
+}
+
+async function loadAllJobs() {
+  const rows = await fetchAllJobRows();
+  const jobs = {};
+  (rows || []).forEach((r) => {
+    jobs[r.job_id] = {
+      jobId: r.job_id,
+      branch: r.branch,
+      title: r.title,
+      memo: r.memo,
+      company: r.company,
+      companyManual: !!r.company_manual,
+      employmentType: r.employment_type,
+      revisions: r.revisions || [],
+      titleHistory: r.title_history || [],
+      snapshots: r.snapshots || {},
+      createdAt: r.created_at,
+      updatedAt: r.updated_at,
+    };
+  });
+  return jobs;
+}
+function jobPayload(job) {
+  return {
+    job_id: job.jobId,
+    branch: job.branch,
+    title: job.title,
+    memo: job.memo,
+    company: job.company,
+    company_manual: !!job.companyManual,
+    employment_type: job.employmentType,
+    revisions: job.revisions || [],
+    title_history: job.titleHistory || [],
+    snapshots: job.snapshots || {},
+    updated_at: new Date().toISOString(),
+  };
+}
+async function saveJob(job) {
+  await saveJobs([job]);
+}
+/* 求人ボックスのCSVは数千行あるため、1件ずつではなくまとめて送る */
+async function saveJobs(jobList) {
+  const CHUNK = 500;
+  for (let i = 0; i < jobList.length; i += CHUNK) {
+    const payload = jobList.slice(i, i + CHUNK).filter(Boolean).map(jobPayload);
+    if (!payload.length) continue;
+    try {
+      await sbFetch("jobs", {
+        method: "POST",
+        headers: { "Prefer": "resolution=merge-duplicates,return=minimal" },
+        body: JSON.stringify(payload),
+      });
+    } catch (e) {
+      /* どこまで保存できたかが分かるようにしてから投げ直す */
+      throw new Error(`${jobList.length}件中${i}件を保存した時点で中断しました。${e.message}`);
+    }
+  }
+}
+async function deleteJobStorage(jobId) {
+  await sbFetch(`jobs?job_id=eq.${encodeURIComponent(jobId)}`, {
+    method: "DELETE",
+    headers: { "Prefer": "return=minimal" },
+  });
+}
+/* まとめて削除。1件ずつ消すとURL1本につき1件で何千回も往復するため、
+   in.(...) に詰めて送る。URLが長くなりすぎないよう200件ずつに割る。 */
+async function deleteJobsStorage(ids) {
+  const CHUNK = 200;
+  for (let i = 0; i < ids.length; i += CHUNK) {
+    const list = ids.slice(i, i + CHUNK).map((id) => encodeURIComponent(`"${id}"`)).join(",");
+    await sbFetch(`jobs?job_id=in.(${list})`, {
+      method: "DELETE",
+      headers: { "Prefer": "return=minimal" },
+    });
+  }
+}
+
+/* ==================================================================
+   メインコンポーネント
+================================================================== */
+
+function JobAdDashboard() {
+  const [jobs, setJobs] = useState({});
+  const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState(null);
+  const [busyBranch, setBusyBranch] = useState(null);
+  const [selectedJobId, setSelectedJobId] = useState(null);
+  const [toast, setToast] = useState(null);
+  /* 削除の確認ダイアログ。{ label, ids } を入れると開く */
+  const [confirmDel, setConfirmDel] = useState(null);
+  const [delBusy, setDelBusy] = useState(false);
+  const [lastImport, setLastImport] = useState({});
+  const [activeSource, setActiveSource] = useState("airwork");
+  const [activeTab, setActiveTab] = useState("all");
+  const [searchText, setSearchText] = useState("");
+  const [sortMode, setSortMode] = useState("priority");
+  const [impFilter, setImpFilter] = useState("all");
+  /* 最新の取り込みに載っているかどうかの絞り込み(古い求人の掃除用) */
+  const [freshFilter, setFreshFilter] = useState("all");
+  /* 一括で修正日を登録するための選択状態(求人番号の集合) */
+  const [selectedIds, setSelectedIds] = useState(() => new Set());
+  const [bulkDate, setBulkDate] = useState(todayStr());
+  const [bulkBusy, setBulkBusy] = useState(false);
+  const fileInputs = useRef({});
+  const backupInputRef = useRef(null);
+  const toastTimer = useRef(null);
+  /* 取り込み中に最新のjobsを同期的に読むための控え */
+  const jobsRef = useRef({});
+
+  useEffect(() => { jobsRef.current = jobs; }, [jobs]);
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const loaded = await loadAllJobs();
+        setJobs(loaded);
+        setLoadError(null);
+      } catch (e) {
+        setLoadError(describeError(e));
+      } finally {
+        setLoading(false);
+      }
+    })();
+  }, []);
+
+  function showToast(msg, kind = "ok") {
+    setToast({ msg, kind });
+    if (toastTimer.current) clearTimeout(toastTimer.current);
+    /* エラーは読む時間が要るので長めに出す */
+    toastTimer.current = setTimeout(() => setToast(null), kind === "error" ? 14000 : 3400);
+  }
+
+  const reminder = useMemo(() => nextReminder(), []);
+
+  const handleFiles = useCallback(async (sourceId, branchId, fileList) => {
+    const files = Array.from(fileList || []);
+    if (!files.length) return;
+    setBusyBranch(`${sourceId}:${branchId}`);
+
+    let totalRows = 0, newJobs = 0, revisedJobs = 0, skippedRows = 0;
+    const branchCounts = {};
+    const mismatched = [];
+    /* 保存に失敗した場合、成功メッセージを出してはいけない
+       (保存されていないのに保存できたと誤解させてしまうため) */
+    let saveError = null;
+
+    for (const file of files) {
+      const period = extractPeriod(file.name);
+      const snapshotDate = period.date;
+      try {
+        let text, rows;
+        try {
+          text = await readCsvText(file);
+          rows = Papa.parse(text, { header: true, skipEmptyLines: true }).data;
+        } catch (e) {
+          showToast(`${file.name} を読み込めませんでした。CSVの形式を確認してください。`, "error");
+          continue;
+        }
+        /* ボタンを押し間違えても列名から媒体を判定して正しく取り込む */
+        const fileSource = detectSource(rows[0]) || sourceId;
+        if (fileSource !== sourceId) mismatched.push(SOURCE_BY_ID[fileSource].label);
+        const fallbackBranch = resolveBranch(fileSource, branchId);
+
+        const records = [];
+        rows.forEach((row) => {
+          const rec = fileSource === "kyujinbox"
+            ? parseKyujinboxRow(row, fallbackBranch)
+            : parseAirworkRow(row, fallbackBranch);
+          if (rec === "skip") { skippedRows += 1; return; }
+          if (rec) records.push(rec);
+        });
+        totalRows += records.length;
+
+        const next = { ...jobsRef.current };
+        const touched = [];
+        records.forEach((rec) => {
+          const { jobId, title, memo, branch, employmentType } = rec;
+          const stats = period.start ? { ...rec.stats, periodStart: period.start } : rec.stats;
+          if (rec.status) stats.status = rec.status;
+          const existing = next[jobId];
+          branchCounts[branch] = (branchCounts[branch] || 0) + 1;
+
+          if (!existing) {
+            newJobs += 1;
+            next[jobId] = {
+              jobId, branch, title, memo, company: rec.company, companyManual: false,
+              employmentType, revisions: [], titleHistory: [{ date: snapshotDate, title }],
+              snapshots: { [snapshotDate]: stats },
+              createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(),
+            };
+          } else {
+            const revisions = new Set(existing.revisions || []);
+            let titleHistory = existing.titleHistory || [{ date: existing.createdAt?.slice(0, 10) || snapshotDate, title: existing.title }];
+            if (existing.title && title && existing.title !== title) {
+              revisions.add(snapshotDate);
+              titleHistory = [...titleHistory, { date: snapshotDate, title }];
+              revisedJobs += 1;
+            }
+            next[jobId] = {
+              ...existing, branch, title, memo,
+              company: existing.companyManual ? existing.company : (rec.company || existing.company),
+              employmentType, revisions: Array.from(revisions).sort(), titleHistory,
+              snapshots: { ...existing.snapshots, [snapshotDate]: stats },
+              updatedAt: new Date().toISOString(),
+            };
+          }
+          touched.push(next[jobId]);
+        });
+
+        jobsRef.current = next;
+        setJobs(next);
+        await saveJobs(touched);
+      } catch (e) {
+        /* 画面には反映済みなので、保存だけが失敗したことが分かる文言にする */
+        saveError = `画面には反映しましたが、Supabaseへの保存に失敗しました。再読み込みすると取り込んだ内容は消えます。${describeError(e)}`;
+      }
+    }
+
+    setBusyBranch(null);
+    if (saveError) {
+      showToast(saveError, "error");
+      return;
+    }
+    setLastImport((prev) => ({ ...prev, [`${sourceId}:${branchId}`]: { date: todayStr(), count: totalRows } }));
+    if (totalRows) {
+      const label = mismatched.length ? mismatched[0] : SOURCE_BY_ID[sourceId].label;
+      let msg = `${label}として${totalRows}件の求人データを取り込みました`;
+      const detail = [];
+      if (newJobs) detail.push(`新規${newJobs}件`);
+      if (revisedJobs) detail.push(`修正検知${revisedJobs}件`);
+      if (skippedRows) detail.push(`募集停止${skippedRows}件は対象外`);
+      const branchDetail = Object.entries(branchCounts).map(([b, c]) => `${b} ${c}件`).join(" / ");
+      if (branchDetail) detail.push(branchDetail);
+      if (detail.length) msg += `(${detail.join("・")})`;
+      showToast(msg);
+    } else if (skippedRows) {
+      showToast(`取り込める求人がありませんでした(募集停止${skippedRows}件は対象外)`, "error");
+    }
+  }, []);
+
+  function addRevision(jobId, dateStr) {
+    setJobs((prev) => {
+      const job = prev[jobId];
+      if (!job) return prev;
+      const revisions = Array.from(new Set([...(job.revisions || []), dateStr])).sort();
+      const updated = { ...job, revisions, updatedAt: new Date().toISOString() };
+      saveJob(updated).catch(() => showToast("保存に失敗しました", "error"));
+      return { ...prev, [jobId]: updated };
+    });
+    showToast("修正日を記録しました");
+  }
+  /* 一覧でチェックした求人に、まとめて同じ修正日を登録する */
+  async function addRevisionToSelected(dateStr) {
+    const ids = Array.from(selectedIds);
+    if (!ids.length || !dateStr) return;
+    setBulkBusy(true);
+    const next = { ...jobsRef.current };
+    const touched = [];
+    ids.forEach((id) => {
+      const job = next[id];
+      if (!job) return;
+      const revisions = Array.from(new Set([...(job.revisions || []), dateStr])).sort();
+      next[id] = { ...job, revisions, updatedAt: new Date().toISOString() };
+      touched.push(next[id]);
+    });
+    jobsRef.current = next;
+    setJobs(next);
+    try {
+      await saveJobs(touched);
+      setSelectedIds(new Set());
+      showToast(`${touched.length}件に修正日(${dateStr})を登録しました`);
+    } catch (e) {
+      showToast(`画面には反映しましたが、Supabaseへの保存に失敗しました。再読み込みすると登録した修正日は消えます。${describeError(e)}`, "error");
+    } finally {
+      setBulkBusy(false);
+    }
+  }
+
+  function toggleSelect(jobId) {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(jobId)) next.delete(jobId); else next.add(jobId);
+      return next;
+    });
+  }
+
+  function removeRevision(jobId, dateStr) {
+    setJobs((prev) => {
+      const job = prev[jobId];
+      if (!job) return prev;
+      const revisions = (job.revisions || []).filter((d) => d !== dateStr);
+      const updated = { ...job, revisions, updatedAt: new Date().toISOString() };
+      saveJob(updated).catch(() => {});
+      return { ...prev, [jobId]: updated };
+    });
+  }
+  function updateJobInfo(jobId, fields) {
+    setJobs((prev) => {
+      const job = prev[jobId];
+      if (!job) return prev;
+      const updated = { ...job, ...fields, updatedAt: new Date().toISOString() };
+      saveJob(updated).catch(() => {});
+      return { ...prev, [jobId]: updated };
+    });
+  }
+  function deleteJob(jobId) {
+    setJobs((prev) => { const next = { ...prev }; delete next[jobId]; return next; });
+    deleteJobStorage(jobId).catch(() => {});
+    if (selectedJobId === jobId) setSelectedJobId(null);
+    showToast("求人データを削除しました");
+  }
+  function askDelete(label, ids) {
+    if (!ids.length) return;
+    setConfirmDel({ label, ids });
+  }
+  /* 先にSupabaseから消してから画面に反映する。
+     途中で失敗したときに、画面だけ消えて実際は残っている状態を作らないため。 */
+  async function runDelete() {
+    const ids = confirmDel.ids;
+    setDelBusy(true);
+    try {
+      await deleteJobsStorage(ids);
+      const next = { ...jobsRef.current };
+      ids.forEach((id) => { delete next[id]; });
+      jobsRef.current = next;
+      setJobs(next);
+      setSelectedIds((prev) => { const n = new Set(prev); ids.forEach((id) => n.delete(id)); return n; });
+      if (ids.includes(selectedJobId)) setSelectedJobId(null);
+      setConfirmDel(null);
+      showToast(`${ids.length}件を削除しました`);
+    } catch (e) {
+      showToast(`削除に失敗しました。${describeError(e)}`, "error");
+    } finally {
+      setDelBusy(false);
+    }
+  }
+
+  function exportBackup() {
+    const blob = new Blob([JSON.stringify(jobs, null, 2)], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `job-ad-dashboard-backup_${todayStr()}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+    showToast("バックアップをダウンロードしました");
+  }
+
+  function importBackup(file) {
+    const reader = new FileReader();
+    reader.onload = () => {
+      try {
+        const data = JSON.parse(reader.result);
+        setJobs((prev) => {
+          const next = { ...prev, ...data };
+          Object.values(data).forEach((job) => saveJob(job).catch(() => {}));
+          return next;
+        });
+        showToast(`${Object.keys(data).length}件の求人データを復元しました`);
+      } catch (e) {
+        showToast("バックアップファイルの読み込みに失敗しました", "error");
+      }
+    };
+    reader.readAsText(file);
+  }
+
+  /* 拠点ごとの「いちばん新しい取り込み日」。
+     拠点によって取り込む日が違うので、古いかどうかは拠点の中で比べる。 */
+  const latestByBranch = useMemo(() => {
+    const out = {};
+    Object.values(jobs).forEach((j) => {
+      const d = Object.keys(j.snapshots || {}).sort().pop();
+      if (!d) return;
+      const k = `${sourceOf(j.jobId)}:${j.branch}`;
+      if (!out[k] || d > out[k]) out[k] = d;
+    });
+    return out;
+  }, [jobs]);
+  const lastImportOf = (job) => Object.keys(job.snapshots || {}).sort().pop() || "";
+  /* その拠点の最新の取り込みに載っていない＝掲載が終わった可能性がある求人 */
+  const isStale = (job) => {
+    const d = lastImportOf(job);
+    const latest = latestByBranch[`${sourceOf(job.jobId)}:${job.branch}`];
+    return !!(d && latest && d < latest);
+  };
+
+  const ranked = useMemo(() => {
+    let source = Object.values(jobs).filter((j) => sourceOf(j.jobId) === activeSource);
+    if (activeTab !== "all") source = source.filter((j) => j.branch === activeTab);
+    const q = searchText.trim().toLowerCase();
+    if (q) {
+      source = source.filter((j) => (j.company || "").toLowerCase().includes(q) || (j.title || "").toLowerCase().includes(q));
+    }
+    if (freshFilter !== "all") {
+      source = source.filter((j) => (freshFilter === "stale" ? isStale(j) : !isStale(j)));
+    }
+    let list = source.map((job) => ({ job, m: deriveJobMetrics(job) }));
+    if (impFilter !== "all") {
+      list = list.filter(({ m }) => {
+        const imp = m.latest ? m.latest.impressions : 0;
+        return impFilter === "shown" ? imp > 0 : imp === 0;
+      });
+    }
+    if (sortMode === "company") {
+      list.sort((a, b) => (a.job.company || "").localeCompare(b.job.company || "", "ja"));
+    } else {
+      list.sort((a, b) => {
+        const aImp = a.m.latest ? a.m.latest.impressions : 0;
+        const bImp = b.m.latest ? b.m.latest.impressions : 0;
+        if ((aImp === 0) !== (bImp === 0)) return aImp === 0 ? 1 : -1;
+        const aApplies = a.m.latest ? a.m.latest.applies : 0;
+        const bApplies = b.m.latest ? b.m.latest.applies : 0;
+        if (aApplies !== bApplies) return aApplies - bApplies;
+        const aCtr = a.m.latest ? a.m.latest.ctr : 0;
+        const bCtr = b.m.latest ? b.m.latest.ctr : 0;
+        if (aCtr !== bCtr) return aCtr - bCtr;
+        return bImp - aImp;
+      });
+    }
+    return list;
+  }, [jobs, activeSource, activeTab, searchText, sortMode, impFilter, freshFilter, latestByBranch]);
+
+  /* 媒体ごとの登録件数(媒体タブ用) */
+  const sourceCounts = useMemo(() => {
+    const counts = {};
+    SOURCES.forEach((s) => { counts[s.id] = 0; });
+    Object.values(jobs).forEach((j) => { counts[sourceOf(j.jobId)] = (counts[sourceOf(j.jobId)] || 0) + 1; });
+    return counts;
+  }, [jobs]);
+
+  /* 表示中の媒体における拠点ごとの件数(拠点タブ用) */
+  const tabCounts = useMemo(() => {
+    const inSource = Object.values(jobs).filter((j) => sourceOf(j.jobId) === activeSource);
+    const counts = { all: inSource.length };
+    branchesOf(activeSource).forEach((b) => { counts[b.id] = inSource.filter((j) => j.branch === b.id).length; });
+    return counts;
+  }, [jobs, activeSource]);
+
+  function switchSource(sourceId) {
+    setActiveSource(sourceId);
+    setActiveTab("all");
+  }
+
+  /* ヘッダーのチェックボックスは、いま表示されている求人だけを対象にする */
+  const allVisibleSelected = ranked.length > 0 && ranked.every(({ job }) => selectedIds.has(job.jobId));
+  function toggleSelectAllVisible() {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (allVisibleSelected) ranked.forEach(({ job }) => next.delete(job.jobId));
+      else ranked.forEach(({ job }) => next.add(job.jobId));
+      return next;
+    });
+  }
+
+  const selected = selectedJobId ? jobs[selectedJobId] : null;
+  const selectedMetrics = selected ? deriveJobMetrics(selected) : null;
+
+  return (
+    <div className="jad-root">
+      {/* 案件管理システムと同じサイトの別ページ。行き来できるようにタブを置く */}
+      <nav className="jad-appnav">
+        <a href="../">案件一覧</a>
+        <a href="../#/postings">求人管理</a>
+        <span className="is-active">成績ボード</span>
+      </nav>
+
+      <header className="jad-header">
+        <div className="jad-header-title">
+          <span className="jad-eyebrow">求人広告 運用ダッシュボード</span>
+          <h1>成績優先度ボード</h1>
+        </div>
+        <div className="jad-header-meta">
+          {reminder.isToday ? (
+            <div className="jad-reminder is-today"><AlertTriangle size={16} />本日は更新日です。各拠点のCSVをインポートしてください。</div>
+          ) : (
+            <div className="jad-reminder"><Calendar size={16} />次回更新日まであと {reminder.daysUntil} 日(毎月10・20・30日)</div>
+          )}
+          <button className="jad-ghost-btn" onClick={exportBackup}><Download size={14} /> バックアップ保存</button>
+          <button className="jad-ghost-btn" onClick={() => backupInputRef.current?.click()}><UploadCloud size={14} /> バックアップ復元</button>
+          <input ref={backupInputRef} type="file" accept=".json" style={{ display: "none" }}
+                 onChange={(e) => { if (e.target.files[0]) importBackup(e.target.files[0]); e.target.value = ""; }} />
+        </div>
+      </header>
+
+      <div className="jad-source-tabs">
+        {SOURCES.map((s) => (
+          <button key={s.id} className={"jad-source-tab " + (activeSource === s.id ? "is-active" : "")} onClick={() => switchSource(s.id)}>
+            {s.label}<span className="jad-tab-count">{sourceCounts[s.id] || 0}</span>
+          </button>
+        ))}
+      </div>
+
+      {/* 拠点が5つ以上のときは1行4つで折り返す(エアワークは上4つ・下3つ) */}
+      <section className="jad-import-row" style={{ "--jad-import-cols": Math.min(4, branchesOf(activeSource).length) }}>
+        {branchesOf(activeSource).map((b) => {
+          const key = `${activeSource}:${b.id}`;
+          const branchIds = Object.values(jobs)
+            .filter((j) => sourceOf(j.jobId) === activeSource && j.branch === b.id)
+            .map((j) => j.jobId);
+          return (
+            <div key={key} className="jad-branch-card">
+              <div className="jad-branch-name">{b.label}</div>
+              <button className="jad-import-btn" disabled={busyBranch === key || !!loadError} onClick={() => fileInputs.current[key]?.click()}>
+                {busyBranch === key ? <Loader2 size={16} className="jad-spin" /> : <Upload size={16} />}
+                CSVを取り込む
+              </button>
+              <input ref={(el) => (fileInputs.current[key] = el)} type="file" accept=".csv" multiple style={{ display: "none" }}
+                     onChange={(e) => { handleFiles(activeSource, b.id, e.target.files); e.target.value = ""; }} />
+              <div className="jad-branch-count">
+                <span>
+                  登録求人数: {branchIds.length}件
+                  {lastImport[key] && <span> ・最終取込 {lastImport[key].date}</span>}
+                </span>
+                {/* 0件でもボタンは置く。拠点ごとにカードの見た目が変わらないようにするため */}
+                <button className="jad-card-del" disabled={!!loadError || branchIds.length === 0}
+                        title={branchIds.length === 0 ? "削除する求人がありません" : ""}
+                        onClick={() => askDelete(`${b.label} の登録求人 ${branchIds.length}件`, branchIds)}>
+                  全件削除
+                </button>
+              </div>
+            </div>
+          );
+        })}
+      </section>
+
+      {activeSource === "kyujinbox" && (
+        <p className="jad-source-note">
+          求人BOXのCSVは plus / next / up が1ファイルにまとまっているため、「勤務先名」から拠点を自動で振り分けます
+          (判定できない行だけ、押したボタンの拠点に入ります)。ステータスが「募集停止」の求人は取り込みません。
+        </p>
+      )}
+
+      <div className="jad-tabs">
+        <button className={"jad-tab " + (activeTab === "all" ? "is-active" : "")} onClick={() => setActiveTab("all")}>全体<span className="jad-tab-count">{tabCounts.all}</span></button>
+        {branchesOf(activeSource).map((b) => (
+          <button key={b.id} className={"jad-tab " + (activeTab === b.id ? "is-active" : "")} onClick={() => setActiveTab(b.id)}>{b.label}<span className="jad-tab-count">{tabCounts[b.id]}</span></button>
+        ))}
+      </div>
+
+      <div className="jad-toolbar">
+        <input className="jad-search" type="text" placeholder="企業名・求人タイトルで検索" value={searchText} onChange={(e) => setSearchText(e.target.value)} />
+        <div className="jad-sort-toggle">
+          <button className={sortMode === "priority" ? "is-active" : ""} onClick={() => setSortMode("priority")}>優先度順</button>
+          <button className={sortMode === "company" ? "is-active" : ""} onClick={() => setSortMode("company")}>企業名順</button>
+        </div>
+        <div className="jad-sort-toggle">
+          <button className={impFilter === "all" ? "is-active" : ""} onClick={() => setImpFilter("all")}>すべて</button>
+          <button className={impFilter === "shown" ? "is-active" : ""} onClick={() => setImpFilter("shown")}>表示あり</button>
+          <button className={impFilter === "zero" ? "is-active" : ""} onClick={() => setImpFilter("zero")}>表示0</button>
+        </div>
+        <select className="jad-filter-select" value={freshFilter} onChange={(e) => setFreshFilter(e.target.value)}
+                title="その拠点のいちばん新しい取り込みに載っていたかどうかで絞り込みます">
+          <option value="all">取込：すべて</option>
+          <option value="fresh">取込：最新に載っている</option>
+          <option value="stale">取込：最新に載っていない</option>
+        </select>
+      </div>
+
+      {freshFilter === "stale" && (
+        <p className="jad-source-note">
+          その拠点のいちばん新しい取り込みに載っていなかった求人です。掲載が終わっている可能性がありますが、
+          <b>別の広告（キャンペーン）のCSVを取り込んだだけでもここに入ります</b>。消す前に中身を確認してください。
+          見出し行のチェックボックスで表示中を全選択できます。
+        </p>
+      )}
+
+      {selectedIds.size > 0 && (
+        <div className="jad-bulk-bar">
+          <span className="jad-bulk-count">{selectedIds.size}件を選択中</span>
+          <input type="date" value={bulkDate} onChange={(e) => setBulkDate(e.target.value)} />
+          <button className="jad-primary-btn" disabled={bulkBusy || !bulkDate} onClick={() => addRevisionToSelected(bulkDate)}>
+            {bulkBusy ? <Loader2 size={14} className="jad-spin" /> : <Check size={14} />} まとめて修正日として登録
+          </button>
+          <button className="jad-ghost-btn danger" disabled={bulkBusy}
+                  onClick={() => askDelete(`選択した求人 ${selectedIds.size}件`, Array.from(selectedIds))}>
+            選択した求人を削除
+          </button>
+          <button className="jad-ghost-btn" onClick={() => setSelectedIds(new Set())}>選択を解除</button>
+          <span className="jad-bulk-note">検索や絞り込みを変えても選択は残ります</span>
+        </div>
+      )}
+
+      {loading ? (
+        <div className="jad-empty"><Loader2 size={20} className="jad-spin" /> 読み込み中…</div>
+      ) : loadError ? (
+        <div className="jad-load-error">
+          <div className="jad-load-error-head"><AlertTriangle size={16} /> データを読み込めませんでした</div>
+          <p>{loadError}</p>
+          <p className="jad-load-error-note">
+            原因が解消するまで取り込みボタンは押せません。既存のデータを空の状態で上書きしてしまわないためです。
+          </p>
+          <button className="jad-primary-btn" onClick={() => window.location.reload()}>
+            <RotateCcw size={14} /> 再読み込み
+          </button>
+        </div>
+      ) : ranked.length === 0 ? (
+        <div className="jad-empty">
+          {searchText.trim()
+            ? `「${searchText}」に一致する求人が見つかりません。`
+            : activeTab === "all"
+              ? `まだ${SOURCE_BY_ID[activeSource].label}のデータがありません。上のボタンから各拠点の${SOURCE_BY_ID[activeSource].fileHint}を取り込んでください。`
+              : `${branchesOf(activeSource).find((b) => b.id === activeTab)?.label} の求人データがまだありません。`}
+        </div>
+      ) : (
+        <section className="jad-table-wrap">
+          <table className="jad-table">
+            <thead>
+              <tr>
+                <th className="c-check" title="表示中の求人をすべて選択 / 解除">
+                  <input type="checkbox" checked={allVisibleSelected}
+                         onChange={toggleSelectAllVisible} />
+                </th>
+                <th className="c-rank">{sortMode === "priority" ? "優先度" : "#"}</th>
+                {activeTab === "all" && <th className="c-branch">拠点</th>}
+                <th className="c-name">求人 / 企業</th>
+                <th className="c-num">表示数</th>
+                <th className="c-num">応募数</th>
+                <th className="c-num">クリック率</th>
+                <th className="c-date">最終取込</th>
+                <th className="c-date">直近修正日</th>
+                <th className="c-num">経過日数</th>
+                <th className="c-num">修正後<br/>クリック/日</th>
+                <th className="c-num">修正前後<br/>変化</th>
+                <th className="c-detail"></th>
+              </tr>
+            </thead>
+            <tbody>
+              {ranked.map(({ job, m }, idx) => (
+                <tr key={job.jobId} className={sortMode === "priority" && idx < 3 ? "is-priority" : ""} onClick={() => setSelectedJobId(job.jobId)}>
+                  {/* 行クリックは詳細を開くので、チェックボックスまで伝播させない */}
+                  <td className="c-check" onClick={(e) => e.stopPropagation()}>
+                    <input type="checkbox" checked={selectedIds.has(job.jobId)}
+                           onChange={() => toggleSelect(job.jobId)} />
+                  </td>
+                  <td className="c-rank"><span className={"jad-rank-badge " + (sortMode === "priority" ? (idx < 3 ? "danger" : idx < 8 ? "warn" : "ok") : "ok")}>{idx + 1}</span></td>
+                  {activeTab === "all" && <td className="c-branch">{job.branch}</td>}
+                  <td className="c-name">
+                    <div className="jad-job-name">{job.title}</div>
+                    <div className="jad-job-sub">{job.company || "(企業名未判定)"} ・ ID:{displayJobId(job.jobId)}</div>
+                  </td>
+                  <td className="c-num">{m.latest ? fmtInt(m.latest.impressions) : "—"}</td>
+                  <td className="c-num">{m.latest ? fmtInt(m.latest.applies) : "—"}</td>
+                  <td className="c-num">{m.latest ? fmtPct(m.latest.ctr) : "—"}</td>
+                  <td className={"c-date" + (isStale(job) ? " is-stale" : "")}>
+                    {lastImportOf(job) || "—"}
+                    {isStale(job) && <span className="jad-stale-tag">最新に無し</span>}
+                  </td>
+                  <td className="c-date">{m.lastRevision || "—"}</td>
+                  <td className="c-num">{m.elapsedDays !== null ? m.elapsedDays + "日" : "—"}</td>
+                  <td className="c-num">{m.clicksPerDaySinceRevision !== null ? m.clicksPerDaySinceRevision.toFixed(1) : "—"}</td>
+                  <td className="c-num">
+                    {m.changePct === null ? "—" : (
+                      <span className={"jad-change " + (m.changePct >= 0 ? "up" : "down")}>
+                        {m.changePct >= 0 ? <TrendingUp size={13} /> : <TrendingDown size={13} />}{Math.abs(m.changePct).toFixed(0)}%
+                      </span>
+                    )}
+                  </td>
+                  <td className="c-detail"><ChevronRight size={16} /></td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </section>
+      )}
+
+      {Object.keys(jobs).length > 0 && (
+        <div className="jad-footer-row">
+          <button className="jad-ghost-btn" onClick={() => askDelete("すべての求人データ（全媒体・全拠点）", Object.keys(jobs))}>
+            <RotateCcw size={14} /> 全データを削除
+          </button>
+        </div>
+      )}
+
+      {selected && selectedMetrics && (
+        <DetailPanel job={selected} metrics={selectedMetrics} onClose={() => setSelectedJobId(null)}
+                     onAddRevision={addRevision} onRemoveRevision={removeRevision}
+                     onUpdateInfo={updateJobInfo} onDelete={deleteJob} />
+      )}
+
+      {confirmDel && (
+        <div className="jad-overlay">
+          <div className="jad-confirm">
+            <p><strong>{confirmDel.label}</strong>を削除します。この操作は取り消せません。</p>
+            <p className="jad-confirm-note">
+              取り込んだ実績だけでなく、記録した修正日・タイトルの変更履歴・手入力した企業名も一緒に消えます。
+              残しておきたい場合は、先にヘッダーの「バックアップ保存」を取ってください。
+            </p>
+            <div className="jad-confirm-actions">
+              <button className="jad-ghost-btn" disabled={delBusy} onClick={() => setConfirmDel(null)}>キャンセル</button>
+              <button className="jad-danger-btn" disabled={delBusy} onClick={runDelete}>
+                {delBusy ? <Loader2 size={14} className="jad-spin" /> : null} 削除する
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {toast && <div className={"jad-toast " + toast.kind}>{toast.msg}</div>}
+    </div>
+  );
+}
+
+function DetailPanel({ job, metrics, onClose, onAddRevision, onRemoveRevision, onUpdateInfo, onDelete }) {
+  const [newDate, setNewDate] = useState(todayStr());
+  const [editing, setEditing] = useState(false);
+  const [company, setCompany] = useState(job.company);
+  const [branch, setBranch] = useState(job.branch);
+  const [confirmDel, setConfirmDel] = useState(false);
+  const jobSource = sourceOf(job.jobId);
+
+  const chartData = metrics.snapDates.map((d) => ({ date: d, クリック数: job.snapshots[d].clicks, 応募数: job.snapshots[d].applies }));
+
+  function saveEdit() {
+    onUpdateInfo(job.jobId, { company, branch, companyManual: company !== job.company ? true : job.companyManual });
+    setEditing(false);
+  }
+
+  return (
+    <div className="jad-overlay" onClick={onClose}>
+      <div className="jad-panel" onClick={(e) => e.stopPropagation()}>
+        <div className="jad-panel-head">
+          <button className="jad-icon-btn" onClick={onClose}><ChevronLeft size={16} /> 一覧へ戻る</button>
+          <button className="jad-icon-btn" onClick={onClose}><X size={16} /></button>
+        </div>
+
+        {!editing ? (
+          <div className="jad-panel-title-row">
+            <div>
+              <div className="jad-panel-eyebrow">{SOURCE_BY_ID[jobSource].label} ・ {branch} ・ 求人番号 {displayJobId(job.jobId)} ・ {job.employmentType}</div>
+              <h2>{job.title}</h2>
+              <div className="jad-panel-company"><Building2 size={13}/> {company || "(企業名未判定)"}</div>
+            </div>
+            <button className="jad-ghost-btn" onClick={() => setEditing(true)}>編集</button>
+          </div>
+        ) : (
+          <div className="jad-edit-form">
+            <label>拠点
+              <select value={branch} onChange={(e) => setBranch(e.target.value)}>
+                {branchesOf(jobSource).map((b) => <option key={b.id} value={b.id}>{b.label}</option>)}
+              </select>
+            </label>
+            <label>{jobSource === "kyujinbox" ? "企業名(求人BOXのCSVには含まれないため手入力)" : "企業名(求人メモから自動判定・修正可)"}
+              <input value={company} onChange={(e) => setCompany(e.target.value)} />
+            </label>
+            <div className="jad-edit-actions">
+              <button className="jad-ghost-btn" onClick={() => setEditing(false)}>キャンセル</button>
+              <button className="jad-primary-btn" onClick={saveEdit}><Check size={14}/> 保存</button>
+            </div>
+          </div>
+        )}
+
+        <div className="jad-memo-block"><FileText size={13} /> <span>{job.memo || (jobSource === "kyujinbox" ? "(勤務地情報なし)" : "(求人メモなし)")}</span></div>
+
+        <div className="jad-metric-grid">
+          <Metric label={jobSource === "kyujinbox" ? "応募数(集計期間の合計)" : "累計応募数(最新)"} value={metrics.latest ? fmtInt(metrics.latest.applies) : "—"} />
+          <Metric label="クリック率(最新)" value={metrics.latest ? fmtPct(metrics.latest.ctr) : "—"} />
+          <Metric label="直近修正日" value={metrics.lastRevision || "—"} />
+          <Metric label="修正からの経過日数" value={metrics.elapsedDays !== null ? metrics.elapsedDays + "日" : "—"} />
+          <Metric label="修正後クリック数/日" value={metrics.clicksPerDaySinceRevision !== null ? metrics.clicksPerDaySinceRevision.toFixed(1) : "—"} />
+          <Metric label="修正前後の変化(クリック/日)"
+                  value={metrics.changePct === null ? "データ不足" : (metrics.changePct >= 0 ? "+" : "") + metrics.changePct.toFixed(0) + "%"}
+                  tone={metrics.changePct === null ? "" : metrics.changePct >= 0 ? "good" : "bad"} />
+        </div>
+
+        <div className="jad-chart-block">
+          <h3>{jobSource === "kyujinbox" ? "取り込みごとの推移(クリック数 / 応募数・集計期間の合計)" : "取り込みごとの累計推移(クリック数 / 応募数)"}</h3>
+          {chartData.length > 1 ? (
+            <ResponsiveContainer width="100%" height={220}>
+              <LineChart data={chartData} margin={{ top: 8, right: 16, left: -12, bottom: 0 }}>
+                <CartesianGrid stroke="var(--jad-border)" strokeDasharray="3 4" vertical={false} />
+                <XAxis dataKey="date" tick={{ fontSize: 10, fill: "var(--jad-ink-soft)" }} axisLine={{ stroke: "var(--jad-border)" }} tickLine={false} />
+                <YAxis tick={{ fontSize: 11, fill: "var(--jad-ink-soft)" }} axisLine={false} tickLine={false} width={34}/>
+                <RTooltip contentStyle={{ background: "var(--jad-surface)", border: "1px solid var(--jad-border)", borderRadius: 6, fontSize: 12 }} />
+                <Legend wrapperStyle={{ fontSize: 12 }} />
+                {(job.revisions || []).map((r) => chartData.find((c) => c.date === r) ? (
+                  <ReferenceLine key={r} x={r} stroke="var(--jad-gold)" strokeDasharray="4 3" label={{ value: "修正", fontSize: 10, fill: "var(--jad-gold)", position: "top" }} />
+                ) : null)}
+                <Line type="monotone" dataKey="クリック数" stroke="var(--jad-navy)" strokeWidth={2} dot={{ r: 3 }} />
+                <Line type="monotone" dataKey="応募数" stroke="var(--jad-brick)" strokeWidth={2} dot={{ r: 3 }} />
+              </LineChart>
+            </ResponsiveContainer>
+          ) : (
+            <div className="jad-empty small">取り込みが2回分以上になるとグラフを表示します</div>
+          )}
+        </div>
+
+        {job.titleHistory && job.titleHistory.length > 1 && (
+          <div className="jad-title-history">
+            <h3>求人タイトルの変更履歴</h3>
+            <ul>{job.titleHistory.slice().reverse().map((t, i) => <li key={i}><span className="jad-th-date">{t.date}</span>{t.title}</li>)}</ul>
+          </div>
+        )}
+
+        <div className="jad-revision-block">
+          <h3>修正日(タイトル変化から自動検知・手動追加も可)</h3>
+          <div className="jad-revision-add">
+            <input type="date" value={newDate} onChange={(e) => setNewDate(e.target.value)} />
+            <button className="jad-primary-btn" onClick={() => onAddRevision(job.jobId, newDate)}><Check size={14} /> 修正日として記録</button>
+          </div>
+          <ul className="jad-revision-list">
+            {(job.revisions || []).slice().reverse().map((r) => (
+              <li key={r}><span>{r}</span><button className="jad-icon-btn" onClick={() => onRemoveRevision(job.jobId, r)}><X size={13} /></button></li>
+            ))}
+            {(!job.revisions || job.revisions.length === 0) && <li className="jad-empty-line">まだ記録がありません</li>}
+          </ul>
+        </div>
+
+        <div className="jad-panel-footer">
+          {!confirmDel ? (
+            <button className="jad-ghost-btn danger" onClick={() => setConfirmDel(true)}>この求人データを削除</button>
+          ) : (
+            <div className="jad-confirm-inline">
+              <span>本当に削除しますか?</span>
+              <button className="jad-ghost-btn" onClick={() => setConfirmDel(false)}>キャンセル</button>
+              <button className="jad-danger-btn" onClick={() => onDelete(job.jobId)}>削除する</button>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function Metric({ label, value, tone }) {
+  return (
+    <div className={"jad-metric " + (tone || "")}>
+      <div className="jad-metric-value">{value}</div>
+      <div className="jad-metric-label">{label}</div>
+    </div>
+  );
+}
+
+const root = ReactDOM.createRoot(document.getElementById("root"));
+root.render(<JobAdDashboard />);
+
+</script>
+
+<style>
+:root {
+  --jad-bg: #EEF1EE; --jad-surface: #FFFFFF; --jad-ink: #1E2422; --jad-ink-soft: #5C6660;
+  --jad-border: #DADFD9; --jad-navy: #274A52; --jad-navy-soft: #E5ECEB; --jad-gold: #B5842C;
+  --jad-brick: #A8432B; --jad-brick-soft: #F3E3DE; --jad-good: #3F7A5C; --jad-good-soft: #E3EFE8;
+}
+/* 外部フォント(Google Fonts)への依存をなくし、OS標準フォントを使用しています */
+body { font-family: 'Noto Sans JP', sans-serif; color: var(--jad-ink); }
+.jad-root * { box-sizing: border-box; }
+.jad-spin { animation: jad-spin 1s linear infinite; }
+@keyframes jad-spin { to { transform: rotate(360deg); } }
+
+.jad-appnav { display: flex; gap: 2px; margin-bottom: 14px; border-bottom: 1px solid var(--jad-border); }
+.jad-appnav a, .jad-appnav span { display: inline-flex; align-items: center; padding: 9px 14px; font-size: 13px; font-weight: 700; text-decoration: none; color: var(--jad-ink-soft); border-bottom: 2px solid transparent; }
+.jad-appnav a:hover { color: var(--jad-navy); }
+.jad-appnav .is-active { color: var(--jad-navy); border-bottom-color: var(--jad-navy); }
+.jad-header { display: flex; justify-content: space-between; align-items: flex-end; flex-wrap: wrap; gap: 12px; margin-bottom: 18px; border-bottom: 2px solid var(--jad-navy); padding-bottom: 14px; }
+.jad-eyebrow { font-size: 11px; letter-spacing: 0.12em; color: var(--jad-ink-soft); text-transform: uppercase; }
+.jad-header-title h1 { font-family: 'Zen Kaku Gothic New', sans-serif; font-size: 22px; margin: 2px 0 0; font-weight: 700; color: var(--jad-navy); }
+.jad-header-meta { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.jad-reminder { display: flex; align-items: center; gap: 6px; font-size: 12.5px; background: var(--jad-surface); border: 1px solid var(--jad-border); padding: 7px 12px; border-radius: 20px; color: var(--jad-ink-soft); }
+.jad-reminder.is-today { background: #FBF0DD; border-color: var(--jad-gold); color: #8B6118; font-weight: 600; }
+
+.jad-import-row { display: grid; grid-template-columns: repeat(var(--jad-import-cols, 4), 1fr); gap: 10px; margin-bottom: 20px; }
+@media (max-width: 860px) { .jad-import-row { grid-template-columns: repeat(2, 1fr) !important; } }
+@media (max-width: 520px) { .jad-import-row { grid-template-columns: 1fr !important; } }
+.jad-branch-card { background: var(--jad-surface); border: 1px solid var(--jad-border); border-radius: 8px; padding: 12px 14px; display: flex; flex-direction: column; gap: 8px; }
+.jad-branch-name { font-family: 'Roboto Mono', monospace; font-weight: 500; font-size: 13px; color: var(--jad-navy); }
+.jad-import-btn { display: flex; align-items: center; justify-content: center; gap: 6px; background: var(--jad-navy); color: #fff; border: none; padding: 8px 10px; border-radius: 6px; font-size: 12.5px; cursor: pointer; font-weight: 600; }
+.jad-import-btn:hover { opacity: 0.9; }
+.jad-import-btn:disabled { opacity: 0.6; cursor: default; }
+.jad-branch-count { font-size: 11px; color: var(--jad-ink-soft); display: flex; align-items: center; gap: 8px; justify-content: space-between; }
+.jad-card-del { flex: none; background: none; border: none; padding: 0; font-family: inherit; font-size: 11px; color: var(--jad-ink-soft); text-decoration: underline; cursor: pointer; }
+.jad-card-del:hover:not(:disabled) { color: var(--jad-brick); }
+.jad-card-del:disabled { opacity: .4; cursor: default; }
+.jad-confirm-note { font-size: 11.5px; line-height: 1.8; color: var(--jad-ink-soft); margin-top: 10px; }
+
+.jad-source-tabs { display: flex; gap: 6px; margin-bottom: 14px; }
+.jad-source-tab { display: inline-flex; align-items: center; gap: 6px; background: var(--jad-surface); border: 1px solid var(--jad-border); border-radius: 999px; padding: 7px 16px; font-size: 13px; font-weight: 500; color: var(--jad-ink-soft); cursor: pointer; font-family: 'Roboto Mono', monospace; }
+.jad-source-tab:hover { color: var(--jad-navy); border-color: var(--jad-navy); }
+.jad-source-tab.is-active { background: var(--jad-navy); border-color: var(--jad-navy); color: #fff; font-weight: 700; }
+.jad-source-tab.is-active .jad-tab-count { background: rgba(255,255,255,0.22); color: #fff; }
+.jad-source-note { margin: -8px 0 16px; font-size: 11.5px; line-height: 1.7; color: var(--jad-ink-soft); background: var(--jad-navy-soft); border-radius: 6px; padding: 9px 12px; }
+.jad-tabs { display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 12px; border-bottom: 1px solid var(--jad-border); }
+.jad-tab { display: inline-flex; align-items: center; gap: 6px; background: transparent; border: none; border-bottom: 2px solid transparent; padding: 9px 14px; font-size: 13px; font-weight: 500; color: var(--jad-ink-soft); cursor: pointer; font-family: 'Roboto Mono', monospace; }
+.jad-tab:hover { color: var(--jad-navy); }
+.jad-tab.is-active { color: var(--jad-navy); border-bottom-color: var(--jad-navy); font-weight: 700; }
+.jad-tab-count { background: var(--jad-navy-soft); color: var(--jad-navy); font-size: 10.5px; padding: 1px 7px; border-radius: 10px; font-weight: 500; }
+.jad-tab.is-active .jad-tab-count { background: var(--jad-navy); color: #fff; }
+
+.jad-empty { background: var(--jad-surface); border: 1px dashed var(--jad-border); border-radius: 8px; padding: 30px; text-align: center; color: var(--jad-ink-soft); font-size: 13px; display: flex; align-items: center; justify-content: center; gap: 8px; }
+.jad-empty.small { padding: 16px; font-size: 12px; }
+
+.jad-toolbar { display: flex; gap: 10px; align-items: center; margin-bottom: 12px; flex-wrap: wrap; }
+.jad-search { flex: 1; min-width: 200px; border: 1px solid var(--jad-border); border-radius: 6px; padding: 8px 12px; font-size: 12.5px; font-family: inherit; background: var(--jad-surface); }
+.jad-search:focus { outline: none; border-color: var(--jad-navy); }
+.jad-filter-select { font-family: 'Roboto Mono', monospace; font-size: 12px; padding: 7px 10px; border: 1px solid var(--jad-border); border-radius: 6px; background: var(--jad-surface); color: var(--jad-ink-soft); cursor: pointer; }
+.c-date.is-stale { color: var(--jad-brick); }
+.jad-stale-tag { display: block; font-size: 9.5px; letter-spacing: .02em; }
+.jad-sort-toggle { display: flex; border: 1px solid var(--jad-border); border-radius: 6px; overflow: hidden; }
+.jad-sort-toggle button { background: var(--jad-surface); border: none; padding: 8px 14px; font-size: 12px; color: var(--jad-ink-soft); cursor: pointer; font-family: 'Roboto Mono', monospace; }
+.jad-sort-toggle button + button { border-left: 1px solid var(--jad-border); }
+.jad-sort-toggle button.is-active { background: var(--jad-navy); color: #fff; font-weight: 600; }
+
+.jad-table-wrap { background: var(--jad-surface); border: 1px solid var(--jad-border); border-radius: 8px; overflow: auto; }
+.jad-table { width: 100%; border-collapse: collapse; font-size: 12.5px; min-width: 800px; }
+.jad-table thead th { text-align: left; font-weight: 600; color: var(--jad-ink-soft); font-size: 11px; padding: 10px 12px; border-bottom: 1px solid var(--jad-border); white-space: nowrap; }
+.jad-table tbody tr { border-bottom: 1px solid var(--jad-border); cursor: pointer; }
+.jad-table tbody tr:hover { background: var(--jad-navy-soft); }
+.jad-table tbody tr.is-priority { background: var(--jad-brick-soft); }
+.jad-table tbody tr.is-priority:hover { background: #EFD3CB; }
+.jad-table td { padding: 9px 12px; vertical-align: middle; }
+.c-num, .c-date { font-family: 'Roboto Mono', monospace; text-align: right; white-space: nowrap; }
+.c-branch { font-family: 'Roboto Mono', monospace; color: var(--jad-navy); font-weight: 500; }
+.jad-job-name { font-weight: 600; max-width: 320px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.jad-job-sub { font-size: 11px; color: var(--jad-ink-soft); }
+.jad-rank-badge { display: inline-flex; align-items: center; justify-content: center; width: 24px; height: 24px; border-radius: 50%; font-family: 'Roboto Mono', monospace; font-weight: 500; font-size: 12px; }
+.jad-rank-badge.danger { background: var(--jad-brick); color: #fff; }
+.jad-rank-badge.warn { background: #EFDCB8; color: #7A5417; }
+.jad-rank-badge.ok { background: var(--jad-good-soft); color: var(--jad-good); }
+.jad-change { display: inline-flex; align-items: center; gap: 3px; }
+.jad-change.up { color: var(--jad-good); }
+.jad-change.down { color: var(--jad-brick); }
+.c-detail { color: var(--jad-ink-soft); }
+.c-check { width: 38px; text-align: center; padding-left: 12px !important; padding-right: 0 !important; }
+.c-check input[type="checkbox"] { width: 15px; height: 15px; accent-color: var(--jad-navy); cursor: pointer; vertical-align: middle; }
+.jad-bulk-bar { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin-bottom: 12px; padding: 10px 14px; background: var(--jad-navy-soft); border: 1px solid var(--jad-navy); border-radius: 8px; }
+.jad-bulk-count { font-family: 'Roboto Mono', monospace; font-size: 12.5px; font-weight: 700; color: var(--jad-navy); }
+.jad-bulk-bar input[type="date"] { font-family: inherit; font-size: 12.5px; padding: 6px 9px; border: 1px solid var(--jad-border); border-radius: 6px; background: var(--jad-surface); color: var(--jad-ink); }
+.jad-bulk-note { font-size: 11px; color: var(--jad-ink-soft); margin-left: auto; }
+
+.jad-footer-row { margin-top: 14px; display: flex; justify-content: flex-end; }
+
+.jad-ghost-btn { display: inline-flex; align-items: center; gap: 6px; background: transparent; border: 1px solid var(--jad-border); color: var(--jad-ink-soft); padding: 7px 12px; border-radius: 6px; font-size: 12px; cursor: pointer; }
+.jad-ghost-btn:hover { border-color: var(--jad-navy); color: var(--jad-navy); }
+.jad-ghost-btn.danger { color: var(--jad-brick); }
+.jad-ghost-btn.danger:hover { border-color: var(--jad-brick); }
+.jad-primary-btn { display: inline-flex; align-items: center; gap: 6px; background: var(--jad-navy); color: #fff; border: none; padding: 8px 14px; border-radius: 6px; font-size: 12.5px; font-weight: 600; cursor: pointer; }
+.jad-primary-btn:hover { opacity: 0.92; }
+.jad-danger-btn { background: var(--jad-brick); color: #fff; border: none; padding: 7px 14px; border-radius: 6px; font-size: 12px; cursor: pointer; font-weight: 600; }
+.jad-icon-btn { display: inline-flex; align-items: center; gap: 4px; background: transparent; border: none; color: var(--jad-ink-soft); cursor: pointer; font-size: 12px; padding: 4px; }
+.jad-icon-btn:hover { color: var(--jad-ink); }
+
+.jad-overlay { position: fixed; inset: 0; background: rgba(20,26,24,0.45); display: flex; align-items: center; justify-content: center; z-index: 50; padding: 16px; }
+.jad-panel, .jad-confirm { background: var(--jad-surface); border-radius: 10px; max-width: 640px; width: 100%; max-height: 88vh; overflow-y: auto; padding: 22px; }
+.jad-confirm { max-width: 380px; text-align: center; font-size: 13px; }
+.jad-confirm-actions { display: flex; gap: 8px; justify-content: center; margin-top: 16px; }
+.jad-confirm-inline { display: flex; align-items: center; gap: 8px; font-size: 12.5px; }
+
+.jad-panel-head { display: flex; justify-content: space-between; margin-bottom: 8px; }
+.jad-panel-title-row { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; border-bottom: 1px solid var(--jad-border); padding-bottom: 14px; margin-bottom: 14px; }
+.jad-panel-eyebrow { font-family: 'Roboto Mono', monospace; font-size: 11px; color: var(--jad-ink-soft); }
+.jad-panel-title-row h2 { font-family: 'Zen Kaku Gothic New', sans-serif; font-size: 17px; margin: 3px 0; color: var(--jad-ink); line-height: 1.4; }
+.jad-panel-company { font-size: 12.5px; color: var(--jad-ink-soft); display: flex; align-items: center; gap: 5px; }
+
+.jad-edit-form { display: flex; flex-direction: column; gap: 10px; border-bottom: 1px solid var(--jad-border); padding-bottom: 16px; margin-bottom: 14px; }
+.jad-edit-form label { font-size: 11.5px; color: var(--jad-ink-soft); display: flex; flex-direction: column; gap: 4px; }
+.jad-edit-form input, .jad-edit-form select { border: 1px solid var(--jad-border); border-radius: 6px; padding: 7px 9px; font-size: 13px; font-family: inherit; color: var(--jad-ink); }
+.jad-edit-actions { display: flex; gap: 8px; justify-content: flex-end; }
+
+.jad-memo-block { display: flex; align-items: flex-start; gap: 6px; background: var(--jad-bg); border-radius: 6px; padding: 8px 10px; font-size: 11.5px; color: var(--jad-ink-soft); margin-bottom: 16px; white-space: pre-wrap; line-height: 1.5; }
+
+.jad-metric-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 10px; margin-bottom: 20px; }
+.jad-metric { background: var(--jad-bg); border: 1px solid var(--jad-border); border-radius: 8px; padding: 10px 12px; }
+.jad-metric.good { background: var(--jad-good-soft); border-color: var(--jad-good); }
+.jad-metric.bad { background: var(--jad-brick-soft); border-color: var(--jad-brick); }
+.jad-metric-value { font-family: 'Roboto Mono', monospace; font-size: 17px; font-weight: 500; }
+.jad-metric-label { font-size: 10.5px; color: var(--jad-ink-soft); margin-top: 2px; }
+
+.jad-chart-block { margin-bottom: 20px; }
+.jad-chart-block h3, .jad-revision-block h3, .jad-title-history h3 { font-size: 13px; font-weight: 600; margin: 0 0 10px; color: var(--jad-navy); }
+
+.jad-title-history { margin-bottom: 20px; }
+.jad-title-history ul { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.jad-title-history li { font-size: 12px; background: var(--jad-bg); border-radius: 6px; padding: 7px 10px; line-height: 1.4; }
+.jad-th-date { font-family: 'Roboto Mono', monospace; color: var(--jad-navy); margin-right: 8px; font-size: 11px; }
+
+.jad-revision-add { display: flex; gap: 8px; margin-bottom: 12px; }
+.jad-revision-add input { border: 1px solid var(--jad-border); border-radius: 6px; padding: 7px 9px; font-size: 13px; font-family: inherit; }
+.jad-revision-list { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 6px; }
+.jad-revision-list li { display: flex; justify-content: space-between; align-items: center; background: var(--jad-bg); border-radius: 6px; padding: 6px 10px; font-family: 'Roboto Mono', monospace; font-size: 12.5px; }
+.jad-empty-line { color: var(--jad-ink-soft); font-family: 'Noto Sans JP', sans-serif !important; font-size: 12px; }
+
+.jad-panel-footer { border-top: 1px solid var(--jad-border); padding-top: 14px; margin-top: 4px; }
+
+.jad-load-error { background: var(--jad-surface); border: 1px solid var(--jad-brick); border-left-width: 3px; border-radius: 8px; padding: 18px 20px; }
+.jad-load-error-head { display: flex; align-items: center; gap: 7px; color: var(--jad-brick); font-weight: 700; font-size: 13.5px; margin-bottom: 10px; }
+.jad-load-error p { margin: 0 0 10px; font-size: 12.5px; line-height: 1.9; color: var(--jad-ink); }
+.jad-load-error-note { color: var(--jad-ink-soft) !important; font-size: 11.5px !important; }
+.jad-toast { position: fixed; bottom: 22px; left: 50%; transform: translateX(-50%); background: var(--jad-ink); color: #fff; padding: 10px 18px; border-radius: 24px; font-size: 12.5px; z-index: 60; box-shadow: 0 6px 18px rgba(0,0,0,0.2); max-width: min(720px, calc(100vw - 40px)); text-align: center; line-height: 1.8; }
+.jad-toast.error { background: var(--jad-brick); }
+</style>
+</body>
+</html>
