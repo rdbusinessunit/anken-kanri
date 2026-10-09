@@ -56,6 +56,20 @@ async function sbFetch(path, options = {}) {
   return text ? JSON.parse(text) : null;
 }
 
+/* 案件管理システムと共有している汎用テーブル(anken_docs)。
+   広告アカウントと拠点の対応表をここに置き、どの拠点のPCからでも同じ設定を使う。 */
+async function sbDocGet(coll, id) {
+  const rows = await sbFetch(`anken_docs?select=data&coll=eq.${encodeURIComponent(coll)}&id=eq.${encodeURIComponent(id)}`);
+  return (rows && rows[0] && rows[0].data) || null;
+}
+async function sbDocPut(coll, id, data) {
+  await sbFetch("anken_docs?on_conflict=coll,id", {
+    method: "POST",
+    headers: { "Prefer": "resolution=merge-duplicates,return=minimal" },
+    body: JSON.stringify([{ coll, id, data, updated_at: new Date().toISOString() }]),
+  });
+}
+
 /* 失敗の理由を日本語にする。「失敗しました」だけだと、接続先が落ちているのか
    設定の問題なのか切り分けられず、原因を探すのに時間がかかるため。 */
 function describeError(e) {
@@ -242,6 +256,11 @@ function extractPeriod(filename) {
   if (aw) return { start: null, date: `${aw[1]}-${aw[2]}-${aw[3]}` };
   return { start: null, date: todayStr() };
 }
+
+/* エアワークのファイル名に入っている広告アカウント番号。
+   例: 広告配信実績_求人_2726545_9_1～　全体案件_20260911_154104.csv → 2726545
+   同じアカウントなら拠点も同じなので、一度選べば次から自動で割り当てられる。 */
+const adAccountOf = (filename) => (String(filename).match(/_求人_(\d+)_/) || [])[1] || "";
 
 /* エアワークはUTF-8(BOM付き)、求人ボックスはShift_JISで出力されるため、
    バイト列を見て文字コードを判定してから読む。 */
@@ -527,7 +546,13 @@ function JobAdDashboard() {
   const [bulkBusy, setBulkBusy] = useState(false);
   const fileInputs = useRef({});
   const backupInputRef = useRef(null);
+  const bulkInputRef = useRef(null);
   const toastTimer = useRef(null);
+  /* 広告アカウント番号 → 拠点。案件管理と同じSupabaseに置いて全PCで共有する */
+  const [adAccounts, setAdAccounts] = useState({});
+  /* まとめて取り込みの確認待ちリスト */
+  const [queue, setQueue] = useState(null);
+  const [queueBusy, setQueueBusy] = useState("");
   /* 取り込み中に最新のjobsを同期的に読むための控え */
   const jobsRef = useRef({});
 
@@ -539,6 +564,8 @@ function JobAdDashboard() {
         const loaded = await loadAllJobs();
         setJobs(loaded);
         setLoadError(null);
+        /* 対応表が読めなくても取り込みはできる(手で拠点を選ぶだけ)ので、失敗しても止めない */
+        sbDocGet("board", "adAccounts").then((d) => { if (d) setAdAccounts(d); }).catch(() => {});
       } catch (e) {
         setLoadError(describeError(e));
       } finally {
@@ -556,111 +583,167 @@ function JobAdDashboard() {
 
   const reminder = useMemo(() => nextReminder(), []);
 
-  const handleFiles = useCallback(async (sourceId, branchId, fileList) => {
+  /* CSVを読んで、媒体・拠点・期間まで判定した状態にする。
+     拠点ボタンからの取り込みでも、まとめて取り込みでも、ここを通る。 */
+  async function prepareFile(file, fallbackSource, fallbackBranch) {
+    const rows = Papa.parse(await readCsvText(file), { header: true, skipEmptyLines: true }).data;
+    /* 列名から媒体を判定するので、ボタンを押し間違えても正しく取り込める */
+    const source = detectSource(rows[0]) || fallbackSource || null;
+    if (!source) return null;
+    const account = source === "airwork" ? adAccountOf(file.name) : "";
+    /* 拠点ボタンから取り込んだときは、押した拠点を必ず優先する。
+       記憶した対応表は、拠点を指定しない「まとめて取り込み」のときだけ使う。 */
+    const guessed = source === "airwork"
+      ? (fallbackBranch ? resolveBranch(source, fallbackBranch) : (adAccounts[account] || ""))
+      /* 求人BOXは1ファイルに全拠点入っていて勤務先名で振り分けるため、ここでは既定値だけ持つ */
+      : resolveBranch(source, fallbackBranch || branchesOf(source)[0].id);
+    return { name: file.name, rows, source, account, branch: guessed, period: extractPeriod(file.name), count: rows.length };
+  }
+
+  /* 判定済みの1ファイルを jobs に反映する */
+  async function applyFile(p, acc) {
+    const snapshotDate = p.period.date;
+    const fallbackBranch = resolveBranch(p.source, p.branch);
+    const records = [];
+    p.rows.forEach((row) => {
+      const rec = p.source === "kyujinbox"
+        ? parseKyujinboxRow(row, fallbackBranch)
+        : parseAirworkRow(row, fallbackBranch);
+      if (rec === "skip") { acc.skippedRows += 1; return; }
+      if (rec) records.push(rec);
+    });
+    acc.totalRows += records.length;
+
+    const next = { ...jobsRef.current };
+    const touched = [];
+    records.forEach((rec) => {
+      const { jobId, title, memo, branch, employmentType } = rec;
+      const stats = p.period.start ? { ...rec.stats, periodStart: p.period.start } : rec.stats;
+      if (rec.status) stats.status = rec.status;
+      const existing = next[jobId];
+      acc.branchCounts[branch] = (acc.branchCounts[branch] || 0) + 1;
+
+      if (!existing) {
+        acc.newJobs += 1;
+        next[jobId] = {
+          jobId, branch, title, memo, company: rec.company, companyManual: false,
+          employmentType, revisions: [], titleHistory: [{ date: snapshotDate, title }],
+          snapshots: { [snapshotDate]: stats },
+          createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(),
+        };
+      } else {
+        const revisions = new Set(existing.revisions || []);
+        let titleHistory = existing.titleHistory || [{ date: existing.createdAt?.slice(0, 10) || snapshotDate, title: existing.title }];
+        if (existing.title && title && existing.title !== title) {
+          revisions.add(snapshotDate);
+          titleHistory = [...titleHistory, { date: snapshotDate, title }];
+          acc.revisedJobs += 1;
+        }
+        next[jobId] = {
+          ...existing, branch, title, memo,
+          company: existing.companyManual ? existing.company : (rec.company || existing.company),
+          employmentType, revisions: Array.from(revisions).sort(), titleHistory,
+          snapshots: { ...existing.snapshots, [snapshotDate]: stats },
+          updatedAt: new Date().toISOString(),
+        };
+      }
+      touched.push(next[jobId]);
+    });
+
+    jobsRef.current = next;
+    setJobs(next);
+    await saveJobs(touched);
+  }
+
+  /* まとめて取り込み: 選んだファイルを全部読んで、内容を確認してから一度に取り込む */
+  async function prepareQueue(fileList) {
+    const files = Array.from(fileList || []);
+    if (!files.length) return;
+    const out = [], bad = [];
+    for (const file of files) {
+      setQueueBusy(`${file.name} を読んでいます…`);
+      let p = null;
+      try { p = await prepareFile(file, null, null); } catch (e) { p = null; }
+      if (p) out.push(p); else bad.push(file.name);
+    }
+    setQueueBusy("");
+    if (bad.length) showToast(`種類を判定できないファイルがあります：${bad.join("、")}`, "error");
+    if (out.length) setQueue(out);
+  }
+
+  async function runQueue() {
+    const acc = newAcc();
+    let saveError = null;
+    for (const p of queue) {
+      setQueueBusy(`${p.name} を取り込んでいます…`);
+      try { await applyFile(p, acc); }
+      catch (e) {
+        saveError = `画面には反映しましたが、Supabaseへの保存に失敗しました。再読み込みすると取り込んだ内容は消えます。${describeError(e)}`;
+        break;
+      }
+    }
+    /* 今回選んだ「アカウント→拠点」を覚えて、次回から自動で割り当てる */
+    const nextMap = { ...adAccounts };
+    let changed = false;
+    queue.forEach((p) => {
+      if (p.source === "airwork" && p.account && p.branch && nextMap[p.account] !== p.branch) {
+        nextMap[p.account] = p.branch; changed = true;
+      }
+    });
+    if (changed) { setAdAccounts(nextMap); sbDocPut("board", "adAccounts", nextMap).catch(() => {}); }
+
+    const stamp = { date: todayStr(), count: acc.totalRows };
+    setLastImport((prev) => {
+      const n = { ...prev };
+      queue.forEach((p) => { n[`${p.source}:${p.branch}`] = stamp; });
+      return n;
+    });
+    setQueueBusy("");
+    if (saveError) { showToast(saveError, "error"); return; }
+    setQueue(null);
+    importToast(acc, `${queue.length}ファイルから`);
+  }
+
+  function newAcc() { return { totalRows: 0, newJobs: 0, revisedJobs: 0, skippedRows: 0, branchCounts: {} }; }
+  function importToast(acc, label) {
+    if (acc.totalRows) {
+      let msg = `${label}${acc.totalRows}件の求人データを取り込みました`;
+      const detail = [];
+      if (acc.newJobs) detail.push(`新規${acc.newJobs}件`);
+      if (acc.revisedJobs) detail.push(`修正検知${acc.revisedJobs}件`);
+      if (acc.skippedRows) detail.push(`募集停止${acc.skippedRows}件は対象外`);
+      const bd = Object.entries(acc.branchCounts).map(([b, c]) => `${b} ${c}件`).join(" / ");
+      if (bd) detail.push(bd);
+      if (detail.length) msg += `(${detail.join("・")})`;
+      showToast(msg);
+    } else if (acc.skippedRows) {
+      showToast(`取り込める求人がありませんでした(募集停止${acc.skippedRows}件は対象外)`, "error");
+    }
+  }
+
+  const handleFiles = async (sourceId, branchId, fileList) => {
     const files = Array.from(fileList || []);
     if (!files.length) return;
     setBusyBranch(`${sourceId}:${branchId}`);
-
-    let totalRows = 0, newJobs = 0, revisedJobs = 0, skippedRows = 0;
-    const branchCounts = {};
-    const mismatched = [];
-    /* 保存に失敗した場合、成功メッセージを出してはいけない
-       (保存されていないのに保存できたと誤解させてしまうため) */
-    let saveError = null;
-
+    const acc = newAcc();
+    let saveError = null, label = "";
     for (const file of files) {
-      const period = extractPeriod(file.name);
-      const snapshotDate = period.date;
-      try {
-        let text, rows;
-        try {
-          text = await readCsvText(file);
-          rows = Papa.parse(text, { header: true, skipEmptyLines: true }).data;
-        } catch (e) {
-          showToast(`${file.name} を読み込めませんでした。CSVの形式を確認してください。`, "error");
-          continue;
-        }
-        /* ボタンを押し間違えても列名から媒体を判定して正しく取り込む */
-        const fileSource = detectSource(rows[0]) || sourceId;
-        if (fileSource !== sourceId) mismatched.push(SOURCE_BY_ID[fileSource].label);
-        const fallbackBranch = resolveBranch(fileSource, branchId);
-
-        const records = [];
-        rows.forEach((row) => {
-          const rec = fileSource === "kyujinbox"
-            ? parseKyujinboxRow(row, fallbackBranch)
-            : parseAirworkRow(row, fallbackBranch);
-          if (rec === "skip") { skippedRows += 1; return; }
-          if (rec) records.push(rec);
-        });
-        totalRows += records.length;
-
-        const next = { ...jobsRef.current };
-        const touched = [];
-        records.forEach((rec) => {
-          const { jobId, title, memo, branch, employmentType } = rec;
-          const stats = period.start ? { ...rec.stats, periodStart: period.start } : rec.stats;
-          if (rec.status) stats.status = rec.status;
-          const existing = next[jobId];
-          branchCounts[branch] = (branchCounts[branch] || 0) + 1;
-
-          if (!existing) {
-            newJobs += 1;
-            next[jobId] = {
-              jobId, branch, title, memo, company: rec.company, companyManual: false,
-              employmentType, revisions: [], titleHistory: [{ date: snapshotDate, title }],
-              snapshots: { [snapshotDate]: stats },
-              createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(),
-            };
-          } else {
-            const revisions = new Set(existing.revisions || []);
-            let titleHistory = existing.titleHistory || [{ date: existing.createdAt?.slice(0, 10) || snapshotDate, title: existing.title }];
-            if (existing.title && title && existing.title !== title) {
-              revisions.add(snapshotDate);
-              titleHistory = [...titleHistory, { date: snapshotDate, title }];
-              revisedJobs += 1;
-            }
-            next[jobId] = {
-              ...existing, branch, title, memo,
-              company: existing.companyManual ? existing.company : (rec.company || existing.company),
-              employmentType, revisions: Array.from(revisions).sort(), titleHistory,
-              snapshots: { ...existing.snapshots, [snapshotDate]: stats },
-              updatedAt: new Date().toISOString(),
-            };
-          }
-          touched.push(next[jobId]);
-        });
-
-        jobsRef.current = next;
-        setJobs(next);
-        await saveJobs(touched);
-      } catch (e) {
+      let p;
+      try { p = await prepareFile(file, sourceId, branchId); }
+      catch (e) { showToast(`${file.name} を読み込めませんでした。CSVの形式を確認してください。`, "error"); continue; }
+      if (!p) { showToast(`${file.name} の種類を判定できませんでした。`, "error"); continue; }
+      label = `${SOURCE_BY_ID[p.source].label}として`;
+      try { await applyFile(p, acc); }
+      catch (e) {
         /* 画面には反映済みなので、保存だけが失敗したことが分かる文言にする */
         saveError = `画面には反映しましたが、Supabaseへの保存に失敗しました。再読み込みすると取り込んだ内容は消えます。${describeError(e)}`;
       }
     }
-
     setBusyBranch(null);
-    if (saveError) {
-      showToast(saveError, "error");
-      return;
-    }
-    setLastImport((prev) => ({ ...prev, [`${sourceId}:${branchId}`]: { date: todayStr(), count: totalRows } }));
-    if (totalRows) {
-      const label = mismatched.length ? mismatched[0] : SOURCE_BY_ID[sourceId].label;
-      let msg = `${label}として${totalRows}件の求人データを取り込みました`;
-      const detail = [];
-      if (newJobs) detail.push(`新規${newJobs}件`);
-      if (revisedJobs) detail.push(`修正検知${revisedJobs}件`);
-      if (skippedRows) detail.push(`募集停止${skippedRows}件は対象外`);
-      const branchDetail = Object.entries(branchCounts).map(([b, c]) => `${b} ${c}件`).join(" / ");
-      if (branchDetail) detail.push(branchDetail);
-      if (detail.length) msg += `(${detail.join("・")})`;
-      showToast(msg);
-    } else if (skippedRows) {
-      showToast(`取り込める求人がありませんでした(募集停止${skippedRows}件は対象外)`, "error");
-    }
-  }, []);
+    if (saveError) { showToast(saveError, "error"); return; }
+    setLastImport((prev) => ({ ...prev, [`${sourceId}:${branchId}`]: { date: todayStr(), count: acc.totalRows } }));
+    importToast(acc, label);
+  };
 
   function addRevision(jobId, dateStr) {
     setJobs((prev) => {
@@ -913,6 +996,74 @@ function JobAdDashboard() {
           </button>
         ))}
       </div>
+
+      <section className="jad-bulk-import">
+        <div>
+          <div className="jad-bulk-import-title">まとめて取り込む</div>
+          <p>
+            エアワーク（全拠点）と求人BOXのCSVを、media・拠点を問わず一度に選べます。
+            種類は列名から自動で判定し、エアワークの拠点はファイル名の広告番号から割り当てます
+            （初めての番号だけ選べば、次回から自動になります）。取り込む前に内容を確認できます。
+          </p>
+        </div>
+        <button className="jad-primary-btn" disabled={!!loadError || !!queueBusy || !!queue}
+                onClick={() => bulkInputRef.current?.click()}>
+          {queueBusy ? <Loader2 size={16} className="jad-spin" /> : <Upload size={16} />} CSVをまとめて選ぶ
+        </button>
+        <input ref={bulkInputRef} type="file" accept=".csv" multiple style={{ display: "none" }}
+               onChange={(e) => { prepareQueue(e.target.files); e.target.value = ""; }} />
+      </section>
+
+      {queueBusy && !queue && <p className="jad-source-note">{queueBusy}</p>}
+
+      {queue && (
+        <section className="jad-queue">
+          <div className="jad-queue-head">取り込む内容の確認（{queue.length}ファイル）</div>
+          <table className="jad-queue-table">
+            <thead>
+              <tr><th>媒体</th><th>ファイル</th><th>期間</th><th className="c-num">行数</th><th>拠点</th><th></th></tr>
+            </thead>
+            <tbody>
+              {queue.map((p, i) => (
+                <tr key={i}>
+                  <td><span className="jad-queue-tag">{SOURCE_BY_ID[p.source].label}</span></td>
+                  <td className="jad-queue-name">{p.name}</td>
+                  <td className="jad-queue-sub">{p.period.start ? `${p.period.start}〜${p.period.date}` : p.period.date}</td>
+                  <td className="c-num">{fmtInt(p.count)}</td>
+                  <td>
+                    {p.source === "kyujinbox" ? (
+                      <span className="jad-queue-sub">勤務先名から自動</span>
+                    ) : (
+                      <select value={p.branch}
+                              onChange={(e) => setQueue((q) => q.map((x, j) => (j === i ? { ...x, branch: e.target.value } : x)))}>
+                        <option value="">選んでください</option>
+                        {branchesOf(p.source).map((b) => <option key={b.id} value={b.id}>{b.label}</option>)}
+                      </select>
+                    )}
+                  </td>
+                  <td>
+                    <button className="jad-icon-btn" disabled={!!queueBusy}
+                            onClick={() => setQueue((q) => (q.length > 1 ? q.filter((_, j) => j !== i) : null))}>
+                      <X size={13} />
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          <div className="jad-queue-actions">
+            {queue.some((p) => p.source === "airwork" && !p.branch) &&
+              <span className="jad-queue-warn">拠点が決まっていないファイルがあります</span>}
+            <span className="jad-queue-sub">{queueBusy}</span>
+            <button className="jad-ghost-btn" disabled={!!queueBusy} onClick={() => setQueue(null)}>やめる</button>
+            <button className="jad-primary-btn"
+                    disabled={!!queueBusy || queue.some((p) => p.source === "airwork" && !p.branch)}
+                    onClick={runQueue}>
+              {queueBusy ? <Loader2 size={14} className="jad-spin" /> : <Check size={14} />} この内容で取り込む
+            </button>
+          </div>
+        </section>
+      )}
 
       {/* 拠点が5つ以上のときは1行4つで折り返す(エアワークは上4つ・下3つ) */}
       <section className="jad-import-row" style={{ "--jad-import-cols": Math.min(4, branchesOf(activeSource).length) }}>
@@ -1282,6 +1433,21 @@ body { font-family: 'Noto Sans JP', sans-serif; color: var(--jad-ink); }
 .jad-reminder { display: flex; align-items: center; gap: 6px; font-size: 12.5px; background: var(--jad-surface); border: 1px solid var(--jad-border); padding: 7px 12px; border-radius: 20px; color: var(--jad-ink-soft); }
 .jad-reminder.is-today { background: #FBF0DD; border-color: var(--jad-gold); color: #8B6118; font-weight: 600; }
 
+.jad-bulk-import { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; background: var(--jad-surface); border: 1px solid var(--jad-navy); border-radius: 8px; padding: 14px 16px; margin-bottom: 14px; }
+.jad-bulk-import > div { flex: 1 1 420px; }
+.jad-bulk-import-title { font-size: 13.5px; font-weight: 700; color: var(--jad-navy); margin-bottom: 4px; }
+.jad-bulk-import p { margin: 0; font-size: 11.5px; line-height: 1.8; color: var(--jad-ink-soft); }
+.jad-queue { background: var(--jad-surface); border: 1px solid var(--jad-border); border-radius: 8px; padding: 14px 16px; margin-bottom: 14px; }
+.jad-queue-head { font-size: 13px; font-weight: 700; color: var(--jad-navy); margin-bottom: 10px; }
+.jad-queue-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+.jad-queue-table th { text-align: left; font-size: 10.5px; color: var(--jad-ink-soft); font-weight: 500; padding: 4px 8px; border-bottom: 1px solid var(--jad-border); }
+.jad-queue-table td { padding: 7px 8px; border-bottom: 1px solid var(--jad-border); vertical-align: middle; }
+.jad-queue-table select { font-family: inherit; font-size: 12px; padding: 4px 8px; border: 1px solid var(--jad-border); border-radius: 5px; background: var(--jad-bg); color: var(--jad-ink); }
+.jad-queue-tag { background: var(--jad-navy-soft); color: var(--jad-navy); font-size: 10.5px; padding: 2px 8px; border-radius: 10px; white-space: nowrap; }
+.jad-queue-name { word-break: break-all; }
+.jad-queue-sub { font-size: 11px; color: var(--jad-ink-soft); }
+.jad-queue-warn { font-size: 11.5px; color: var(--jad-brick); }
+.jad-queue-actions { display: flex; align-items: center; gap: 8px; justify-content: flex-end; margin-top: 12px; }
 .jad-import-row { display: grid; grid-template-columns: repeat(var(--jad-import-cols, 4), 1fr); gap: 10px; margin-bottom: 20px; }
 @media (max-width: 860px) { .jad-import-row { grid-template-columns: repeat(2, 1fr) !important; } }
 @media (max-width: 520px) { .jad-import-row { grid-template-columns: 1fr !important; } }
