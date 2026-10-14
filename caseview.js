@@ -16,6 +16,9 @@ function stampHTML(a) {
 
 /* ===== 入力フィールド ===== */
 let MISS = new Set();
+/* 受注登録する前は赤くしない。開いた瞬間に全部赤いと「失敗した」と感じて
+   手が止まるため。登録した後は、足りない項目を赤で示す。 */
+let MISS_SOFT = false;
 function fld(path, label, type = 'text', o = {}) {
   LABELS[path.replace(/\.\d+\./g, '.*.')] = label;
   const D = S.draft || {};
@@ -23,7 +26,7 @@ function fld(path, label, type = 'text', o = {}) {
   const id = 'f_' + path.replace(/\./g, '_');
   let key = o.miss || label; const pm = path.match(/^positions\.(\d+)\./);
   if (pm && (D.positions || []).length > 1) key += `（職種${+pm[1] + 1}）`;
-  const missing = o.req && MISS.has(key);
+  const missing = o.req && MISS.has(key) && !MISS_SOFT;
   const req = o.req ? `<i class="req">${o.req === true ? '必須' : esc(o.req)}</i>` : '';
   const t = o.t ? ` data-t="${o.t}"` : '';
   let input;
@@ -128,6 +131,10 @@ function viewCase(r) {
     </div>
     ${isNew ? '' : `<div class="row"><a class="btn" href="#/doc/${c.id}/ringi" title="入力した内容から、稟議書・勤務説明書・簡易求人票をExcelで作ります">書類を作る（稟議書・勤務説明書）</a><a class="btn" href="#/postings?case=${c.id}" title="この案件が今どの媒体に何件出ていて、応募が何件あるかを見ます">掲載と応募を見る</a></div>`}
   </div>
+  ${isNew ? `<div class="startnote">
+    <b>全部をいま埋めなくて大丈夫です。</b>
+    <span>まずは<b>拠点・営業担当・取引先企業名</b>の3つを入れて、下の「保存」を押してください。案件が登録され、続きはあとから何回でも足せます。</span>
+  </div>` : ''}
   <div class="casegrid">
     <aside class="flowcol" data-live="flow">${flowPanel(c, stored)}</aside>
     <div>
@@ -162,6 +169,7 @@ function tabToolbar(c, tab) {
 }
 function tabBody(c, tab, isNew) {
   MISS = new Set([...check(c, 'a1').miss, ...check(c, 'a2').miss, ...check(c, 'a3').miss]);
+  MISS_SOFT = isNew;
   const bar = tabToolbar(c, tab);
   switch (tab) {
     case 'a2': return bar + formA2(c);

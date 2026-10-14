@@ -207,6 +207,11 @@ table.list tbody tr.click:hover td{background:var(--accent-soft)}
 .casehead{display:flex;gap:16px;align-items:flex-start;flex-wrap:wrap;margin-bottom:18px}
 .casehead h1{font-family:var(--serif);font-size:30px;letter-spacing:.03em;line-height:1.3}
 .casehead h1 small{font-size:18px;color:var(--ink-2);margin-left:8px}
+/* 新規登録の最初の一言。58項目あっても、まず3つでいいと伝える */
+.startnote{display:flex;flex-direction:column;gap:6px;background:color-mix(in srgb,var(--accent-soft) 70%,var(--surface));border:2px solid var(--accent);border-radius:10px;padding:16px 18px;margin:0 0 18px}
+.startnote b{font-size:17px;color:var(--ink)}
+.startnote span{font-size:15px;line-height:1.8;color:var(--ink-2)}
+.startnote span b{font-size:15px;color:var(--accent)}
 .casegrid{display:grid;grid-template-columns:310px minmax(0,1fr);gap:22px;align-items:start}
 .flowcol{position:sticky;top:72px;display:grid;gap:14px}
 .flowcol .panel{padding:14px 16px}
@@ -238,8 +243,8 @@ table.list tbody tr.click:hover td{background:var(--accent-soft)}
 .f{display:grid;gap:4px;align-content:start;min-width:0}
 .f.w2{grid-column:span 2} .f.w3{grid-column:span 3} .f.wf{grid-column:1/-1}
 @media (max-width:560px){.f.w2,.f.w3{grid-column:1/-1}}
-.f>label,.f>.lb{font-size:15px;font-weight:700;color:var(--ink);display:flex;gap:7px;align-items:center}
-.f .req{font-style:normal;font-size:12px;font-weight:700;letter-spacing:0;color:#fff;background:var(--ink-3);padding:2px 8px;border-radius:10px}
+.f>label,.f>.lb{font-size:15px;font-weight:700;color:var(--ink);display:flex;gap:7px;align-items:center;flex-wrap:wrap;line-height:1.5}
+.f .req{font-style:normal;font-size:12px;font-weight:700;letter-spacing:0;color:#fff;background:var(--ink-3);padding:2px 8px;border-radius:10px;white-space:nowrap;flex:none}
 .f.miss .req{background:var(--crit)}
 .f.miss .req::after{content:"：未入力"}
 .f.miss>label,.f.miss>.lb{color:var(--crit)}
@@ -434,7 +439,7 @@ try { var t0 = localStorage.getItem('bring-theme'); if (t0 === 'light' || t0 ===
 /* 画面の更新が利用者に届くようにする仕組み
    ・JavaScriptは5分ごとに新しいものを取りにいく
    ・version.json の版番号がこのページより新しければ、自動で読み直す */
-const APP_VERSION = "202610141306";
+const APP_VERSION = "202610141353";
 (function () {
   var files = ["config.js","ref.js","core.js","caseview.js","docs.js","postings.js","ads.js","xlsxfill.js","main.js"];
   var q = "?v=" + Math.floor(Date.now() / 300000);
