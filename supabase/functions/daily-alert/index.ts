@@ -29,7 +29,7 @@ function serviceKey(): string {
   }
   return Deno.env.get("SUPABASE_ANON_KEY") ?? "";
 }
-const SB_KEY = serviceKey();
+const ENV_KEY = serviceKey();
 const RESEND_API_KEY = Deno.env.get("RESEND_API_KEY") ?? "";
 const MAIL_FROM = Deno.env.get("MAIL_FROM") ?? "";
 /* 画面のURL。メールから案件を直接開けるようにする */
@@ -47,12 +47,12 @@ const daysUntil = (s: unknown) => {
   return d ? Math.ceil((d.getTime() - JST().getTime()) / 86400000) : 0;
 };
 
-async function loadColl(coll: string) {
+async function loadColl(coll: string, key: string) {
   const out: Json[] = [];
   for (let from = 0; ; from += 1000) {
     const res = await fetch(
       `${SB_URL}/rest/v1/anken_docs?select=id,data&coll=eq.${coll}&order=id`,
-      { headers: { apikey: SB_KEY, Authorization: `Bearer ${SB_KEY}`, Range: `${from}-${from + 999}` } },
+      { headers: { apikey: key, Authorization: `Bearer ${key}`, Range: `${from}-${from + 999}` } },
     );
     if (!res.ok) throw new Error(`${coll} を読めませんでした: ${res.status}`);
     const page = await res.json();
@@ -134,16 +134,29 @@ async function send(to: string[], subject: string, html: string) {
   if (!res.ok) throw new Error(`送信に失敗: ${res.status} ${await res.text()}`);
 }
 
-Deno.serve(async () => {
+Deno.serve(async (req) => {
   try {
-    if (!SB_KEY) {
-      return Response.json({ ok: false, error: "データを読む鍵が見つかりません（SUPABASE_SERVICE_ROLE_KEY / SUPABASE_SECRET_KEYS / SUPABASE_ANON_KEY のいずれも未設定）" }, { status: 500 });
+    /* 呼び出し元が付けてきた鍵を使う。cronはservice key、手動テストはanon keyを付ける。
+       どちらも anken_docs を読める（setup.sql で anon に select を許可しているため）。 */
+    const sent = (req.headers.get("Authorization") ?? "").replace(/^Bearer[ ]+/i, "").trim();
+    const key = sent || ENV_KEY;
+    /* ?debug=1 で、どの環境変数が来ているかだけ返す（値は出さない） */
+    if (new URL(req.url).searchParams.get("debug")) {
+      const names = ["SUPABASE_URL", "SUPABASE_SERVICE_ROLE_KEY", "SUPABASE_SECRET_KEYS", "SUPABASE_ANON_KEY", "SUPABASE_PUBLISHABLE_KEYS", "RESEND_API_KEY", "MAIL_FROM", "APP_URL"];
+      return Response.json({
+        env: Object.fromEntries(names.map((n) => [n, (Deno.env.get(n) ?? "").length])),
+        使う鍵: sent ? "呼び出し元のもの" : ENV_KEY ? "環境変数のもの" : "なし",
+        鍵の形: key ? key.slice(0, 7) + "…(" + key.length + "文字)" : "",
+      });
+    }
+    if (!key) {
+      return Response.json({ ok: false, error: "データを読む鍵がありません" }, { status: 500 });
     }
     if (!RESEND_API_KEY || !MAIL_FROM) {
       return Response.json({ ok: false, error: "RESEND_API_KEY か MAIL_FROM が未設定です" }, { status: 400 });
     }
     const [cfgRows, caseRows, postRows] = await Promise.all([
-      loadColl("config"), loadColl("cases"), loadColl("postings"),
+      loadColl("config", key), loadColl("cases", key), loadColl("postings", key),
     ]);
     const cfg: any = (cfgRows.find((r: any) => r.id === "main") as any)?.data ?? {};
     const mail = cfg.mail ?? {};
