@@ -141,8 +141,9 @@ function tabsHTML(c, tab, tabHref) {
   const kg = kengakuCount(c);
   return TABS.map(([t, l]) => {
     let badge = '';
-    if (cnt[t]) badge = `<span class="cnt ${cnt[t].ok ? 'full' : ''}">${cnt[t].done}/${cnt[t].total}</span>`;
-    if (t === 'kg') badge = `<span class="cnt ${kg >= REQ.a3.kengakuMin ? 'full' : ''}">${kg}/${KENGAKU.length}</span>`;
+    /* 数字だけだと何の数か分からないので「入力」と添える。埋まったら緑に */
+    if (cnt[t]) badge = `<span class="cnt ${cnt[t].ok ? 'full' : ''}" title="必要な項目のうち入力済みの数">${cnt[t].ok ? '入力ずみ' : `入力 ${cnt[t].done}/${cnt[t].total}`}</span>`;
+    if (t === 'kg') badge = `<span class="cnt ${kg >= REQ.a3.kengakuMin ? 'full' : ''}" title="見学メモの入力数">入力 ${kg}/${KENGAKU.length}</span>`;
     return `<a href="${tabHref(t)}"${t === tab ? ' aria-current="page"' : ''}>${l}${badge}</a>`;
   }).join('');
 }
@@ -219,7 +220,7 @@ function flowPanel(c, stored) {
   }
   const notes = (stored.history || []).filter(h => h.type === 'note').slice(0, 5);
   return `<div class="panel"><h3>進捗</h3>
-    <ol class="flowv">${st.map((x, i) => `<li class="${x.st}"><span class="dot">${x.st === 'done' ? '✓' : x.st === 'locked' ? '–' : i}</span><div><div class="t">${x.k}</div><div class="d">${desc[i] || ''}</div></div></li>`).join('')}</ol>
+    <ol class="flowv">${(now => st.map((x, i) => `<li class="${x.st}${i === now ? ' now' : ''}"><span class="dot">${x.st === 'done' ? '✓' : x.st === 'locked' ? '–' : i}</span><div><div class="t">${x.k}${i === now ? '<span class="here">いま ここ</span>' : ''}</div><div class="d">${desc[i] || ''}</div></div></li>`).join(''))(st.findIndex(x => x.st === 'todo' || x.st === 'back' || x.st === 'wait'))}</ol>
     <div style="margin:4px 0 12px">${gaugeHTML(g.max)}</div>
     <div class="row" style="margin-bottom:10px">${interviewOK(stored) ? chip('面接・進捗報告：可', 'ok') : chip('面接・進捗報告：停止（③未入力）', stored.legacy ? '' : 'crit')}</div>
     <div class="acts">${acts.join('')}</div></div>

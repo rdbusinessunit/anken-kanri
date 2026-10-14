@@ -174,18 +174,24 @@ table.list tbody tr.click:hover td{background:var(--accent-soft)}
 .trk i.wait{background:linear-gradient(90deg,var(--accent) 50%,var(--line) 50%)}
 .trk i.back{background:var(--warn)}
 .trk i.locked{background:repeating-linear-gradient(135deg,var(--line) 0 3px,transparent 3px 6px);outline:1px solid var(--line);outline-offset:-1px}
+/* 進捗：いまどこで、次に何をするかを色と大きさで示す */
 .flowv{list-style:none;margin:0;padding:0}
-.flowv li{display:grid;grid-template-columns:22px 1fr;gap:10px;padding:0 0 14px;position:relative}
-.flowv li::before{content:"";position:absolute;left:10px;top:20px;bottom:0;width:2px;background:var(--line)}
+.flowv li{display:grid;grid-template-columns:30px 1fr;gap:12px;padding:0 0 18px;position:relative}
+.flowv li::before{content:"";position:absolute;left:14px;top:30px;bottom:0;width:3px;background:var(--line)}
+.flowv li.done::before{background:var(--ok)}
 .flowv li:last-child::before{display:none}
-.flowv .dot{width:22px;height:22px;border-radius:50%;border:2px solid var(--line);background:var(--surface);display:grid;place-items:center;font-size:13px;font-weight:700;color:var(--ink-3);position:relative;z-index:1}
-.flowv .done .dot{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
-.flowv .wait .dot{border-color:var(--accent);color:var(--accent)}
+.flowv .dot{width:30px;height:30px;border-radius:50%;border:3px solid var(--line);background:var(--surface);display:grid;place-items:center;font-size:15px;font-weight:700;color:var(--ink-3);position:relative;z-index:1}
+.flowv .done .dot{background:var(--ok);border-color:var(--ok);color:#fff;font-size:17px}
+.flowv .wait .dot{border-color:var(--info);color:var(--info)}
 .flowv .back .dot{border-color:var(--warn);color:var(--warn)}
-.flowv .locked .dot{border-style:dashed}
-.flowv .t{font-weight:700;font-size:15px;line-height:22px}
-.flowv .d{font-size:14.5px;color:var(--ink-3);line-height:1.5}
-.flowv .d.crit{color:var(--crit)} .flowv .d.warn{color:var(--warn)}
+.flowv .locked .dot{border-style:dashed;opacity:.65}
+.flowv .now .dot{border-color:var(--warn);background:var(--warn);color:#fff;box-shadow:0 0 0 5px color-mix(in srgb,var(--warn) 22%,transparent)}
+.flowv .t{font-weight:700;font-size:17px;line-height:30px;display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.flowv .here{background:var(--warn);color:#fff;font-size:13px;font-weight:700;padding:2px 10px;border-radius:12px;line-height:1.6}
+.flowv .d{font-size:14.5px;color:var(--ink-2);line-height:1.7;margin-top:2px}
+.flowv .locked .t,.flowv .locked .d{opacity:.65}
+.flowv .now .d{color:var(--ink)}
+.flowv .d.crit{color:var(--crit);font-weight:700} .flowv .d.warn{color:var(--warn)}
 
 /* ---- gauge ---- */
 .gauge{display:flex;align-items:center;gap:8px;min-width:130px}
@@ -217,10 +223,10 @@ table.list tbody tr.click:hover td{background:var(--accent-soft)}
 .stamp.empty{border:1.5px dashed var(--line);color:var(--ink-3);transform:none;font-family:var(--sans);font-size:13px}
 .stamp.ng{border-color:var(--warn);color:var(--warn)}
 .tabs{display:flex;gap:2px;border-bottom:1px solid var(--line);overflow-x:auto;margin-bottom:0}
-.tabs a{padding:10px 14px;text-decoration:none;color:var(--ink-2);font-weight:700;font-size:15px;border-bottom:2px solid transparent;white-space:nowrap;display:flex;gap:6px;align-items:center}
-.tabs a[aria-current="page"]{color:var(--ink);border-bottom-color:var(--accent)}
-.tabs .cnt{font-size:13px;font-weight:700;padding:1px 6px;border-radius:9px;background:var(--surface-2);color:var(--ink-3)}
-.tabs .cnt.full{background:var(--ok-soft);color:var(--ok)}
+.tabs a{padding:12px 16px;text-decoration:none;color:var(--ink-2);font-weight:700;font-size:16px;border-bottom:3px solid transparent;white-space:nowrap;display:flex;gap:8px;align-items:center}
+.tabs a[aria-current="page"]{color:var(--ink);border-bottom-color:var(--accent);background:color-mix(in srgb,var(--accent-soft) 60%,transparent)}
+.tabs .cnt{font-size:13px;font-weight:700;padding:3px 10px;border-radius:11px;background:var(--surface-2);color:var(--ink-2);border:1px solid var(--line)}
+.tabs .cnt.full{background:var(--ok);color:#fff;border-color:var(--ok)}
 .formwrap{background:var(--surface);border:1px solid var(--line);border-top:0;border-radius:0 0 var(--r) var(--r);padding:6px 22px 22px}
 @media (max-width:760px){.formwrap{padding:4px 14px 18px}}
 .fs{padding:18px 0 4px;border-top:1px solid var(--line-2)}
@@ -425,7 +431,7 @@ try { var t0 = localStorage.getItem('bring-theme'); if (t0 === 'light' || t0 ===
 /* 画面の更新が利用者に届くようにする仕組み
    ・JavaScriptは5分ごとに新しいものを取りにいく
    ・version.json の版番号がこのページより新しければ、自動で読み直す */
-const APP_VERSION = "202610141200";
+const APP_VERSION = "202610141203";
 (function () {
   var files = ["config.js","ref.js","core.js","caseview.js","docs.js","postings.js","ads.js","xlsxfill.js","main.js"];
   var q = "?v=" + Math.floor(Date.now() / 300000);
