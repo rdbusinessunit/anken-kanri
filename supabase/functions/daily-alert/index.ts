@@ -125,13 +125,23 @@ function body(rows: { c: any; alerts: { tone: string; text: string }[] }[], titl
     </div></div>`;
 }
 
-async function send(to: string[], subject: string, html: string) {
-  const res = await fetch("https://api.resend.com/emails", {
-    method: "POST",
-    headers: { Authorization: `Bearer ${RESEND_API_KEY}`, "Content-Type": "application/json" },
-    body: JSON.stringify({ from: MAIL_FROM, to, subject, html }),
-  });
-  if (!res.ok) throw new Error(`送信に失敗: ${res.status} ${await res.text()}`);
+/* 1件送る。失敗しても例外にせず理由を返す。
+   1人の宛先が弾かれただけで、他の人に届かなくなるのを防ぐため。 */
+async function send(to: string, subject: string, html: string): Promise<string | null> {
+  try {
+    const res = await fetch("https://api.resend.com/emails", {
+      method: "POST",
+      headers: { Authorization: `Bearer ${RESEND_API_KEY}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ from: MAIL_FROM, to: [to], subject, html }),
+    });
+    if (res.ok) return null;
+    const body = await res.text();
+    /* いちばん多いのがこれ。差出人が resend.dev のままだと、自分以外には送れない */
+    if (res.status === 403) return "差出人が未登録のドメインのため、自分以外には送れません（自社ドメインの登録が必要）";
+    return `${res.status} ${body.slice(0, 120)}`;
+  } catch (e) {
+    return String((e as Error).message ?? e);
+  }
 }
 
 Deno.serve(async (req) => {
@@ -171,20 +181,23 @@ Deno.serve(async (req) => {
     if (!hits.length) return Response.json({ ok: true, sent: 0, note: "対応が必要な案件はありません" });
 
     const sent: string[] = [];
+    const failed: { to: string; reason: string }[] = [];
+    const one = async (addr: string, subject: string, html: string) => {
+      const err = await send(addr, subject, html);
+      if (err) failed.push({ to: addr, reason: err }); else sent.push(addr);
+    };
     /* 担当者ごとに、その人の案件だけ送る */
     for (const [name, addr] of Object.entries(mail.to ?? {})) {
       const mine = hits.filter((x) => (x.c.tanto ?? "") === name);
       if (!mine.length || !addr) continue;
-      await send([String(addr)], `【案件管理】対応が必要な案件 ${mine.length}件`, body(mine, `${name} さんの案件`));
-      sent.push(String(addr));
+      await one(String(addr), `【案件管理】対応が必要な案件 ${mine.length}件`, body(mine, `${name} さんの案件`));
     }
     /* まとめて受け取る宛先には全件 */
     for (const addr of mail.cc ?? []) {
       if (!addr) continue;
-      await send([String(addr)], `【案件管理】対応が必要な案件 ${hits.length}件（全担当）`, body(hits, "全担当のまとめ"));
-      sent.push(String(addr));
+      await one(String(addr), `【案件管理】対応が必要な案件 ${hits.length}件（全担当）`, body(hits, "全担当のまとめ"));
     }
-    return Response.json({ ok: true, sent: sent.length, cases: hits.length });
+    return Response.json({ ok: failed.length === 0, 送った: sent.length, 送れなかった: failed.length, 対象の案件: hits.length, 失敗の内訳: failed });
   } catch (e) {
     console.error(e);
     return Response.json({ ok: false, error: String((e as Error).message ?? e) }, { status: 500 });
