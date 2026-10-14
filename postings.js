@@ -139,17 +139,18 @@ function postingDetail(c, groups = adGroupsFor(c)) {
       ${st.total ? `<div class="funnel">${funnel.map(([k, v], i) => `<div><div class="k">${k}</div><div class="v">${v}</div><div class="p">${i ? pct(st.total ? v / st.total : null) : `年齢NG ${st.ageNG}`}</div></div>`).join('')}</div>
       <div class="row" style="align-items:flex-end;gap:18px"><div class="bars" style="flex:1;min-width:200px">${mediaRows.slice(0, 6).map(([m, v]) => `<div class="b"><span>${esc(m)}</span><i style="width:${v / mmax * 100}%"></i><span>${v}</span></div>`).join('')}</div>${sparkSVG(st.byMonth)}</div>
       <p class="small muted" style="margin:8px 0 0">照合した名称：${st.names.slice(0, 6).map(esc).join('、')}${st.names.length > 6 ? ` ほか${st.names.length - 6}` : ''}</p>` : `<p class="small muted">一致する応募がありません。<a href="#/case/${c.id}/log">応募シートでの名称</a>を設定してください。</p>`}
-      ${rv ? `<div class="ai"><h4 style="margin:0">AI求人診断（Claude版で実施した結果）</h4>${aiReviewHTML(rv)}</div>` : ''}
+      ${rv ? `<div class="ai"><h4 style="margin:0">AI求人診断（Claude版で実施した結果）</h4>${aiReviewHTML(rv, c.id)}</div>` : ''}
     </div></div>`;
 }
-function aiReviewHTML(rv) {
+function aiReviewHTML(rv, caseId) {
   const r = rv.result || {}; const tone = { '要改善': 'crit', '要注意': 'warn', '良好': 'ok' }[r.verdict] || '';
   const pr = { '高': 'crit', '中': 'warn', '低': '' };
   return `<div class="row" style="margin:8px 0">${chip(r.verdict || '診断結果', tone)}<span class="small muted">${fmtDT(rv.at)} ${esc(rv.by)}</span></div>
     <p style="margin:0 0 8px;font-size:15px">${esc(r.summary || '')}</p>
     ${(r.issues || []).map(i => `<div class="issue">${chip(i.priority || '', pr[i.priority] || '')}<div><p class="fd"><b>${esc(i.area || '')}</b>　${esc(i.finding || '')}</p><p class="act">→ ${esc(i.action || '')}</p></div></div>`).join('')}
     ${(r.conditionChanges || []).length ? `<p class="small" style="margin:10px 0 4px"><b>条件変更案</b></p><table class="ptab">${r.conditionChanges.map(x => `<tr><td>${esc(x.item)}</td><td class="muted">${esc(x.now)}</td><td>→ <b>${esc(x.proposal)}</b></td><td class="small muted">${esc(x.reason)}</td></tr>`).join('')}</table>` : ''}
-    ${r.adTitle ? `<p class="small" style="margin:10px 0 0"><b>タイトル案</b>　${esc(r.adTitle)}</p>` : ''}`;
+    ${r.adTitle ? `<p class="small" style="margin:10px 0 0"><b>タイトル案</b>　${esc(r.adTitle)}</p>` : ''}
+    ${(r.issues || []).length ? `<div class="row" style="margin-top:12px"><button class="btn sm primary" data-act="iai" data-id="${caseId || ''}">この指摘を課題として記録する</button><span class="small muted">案件の「履歴・管理」に、対応と結果を残せる形で入ります</span></div>` : ''}`;
 }
 
 /* ===== AI ===== */

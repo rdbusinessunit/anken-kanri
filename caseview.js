@@ -138,18 +138,19 @@ function viewCase(r) {
   <div class="casegrid">
     <aside class="flowcol" data-live="flow">${flowPanel(c, stored)}</aside>
     <div>
-      <nav class="tabs" data-live="tabs">${tabsHTML(c, tab, tabHref)}</nav>
+      <nav class="tabs" data-live="tabs">${tabsHTML(c, tab, tabHref, isNew)}</nav>
       <div class="formwrap" id="form">${tabBody(c, tab, isNew)}</div>
     </div>
   </div>`;
 }
-function tabsHTML(c, tab, tabHref) {
+function tabsHTML(c, tab, tabHref, isNew) {
   const cnt = { a1: check(c, 'a1'), a2: check(c, 'a2'), a3: check(c, 'a3') };
   const kg = kengakuCount(c);
   return TABS.map(([t, l]) => {
     let badge = '';
     /* 数字だけだと何の数か分からないので「入力」と添える。埋まったら緑に */
     if (cnt[t]) badge = `<span class="cnt ${cnt[t].ok ? 'full' : ''}" title="必要な項目のうち入力済みの数">${cnt[t].ok ? '入力ずみ' : `入力 ${cnt[t].done}/${cnt[t].total}`}</span>`;
+    if (t === 'log' && !isNew) { const n = openIssues(c).length; if (n) badge = `<span class="cnt crit">未解決 ${n}</span>`; }
     if (t === 'kg') badge = `<span class="cnt ${kg >= REQ.a3.kengakuMin ? 'full' : ''}" title="見学メモの入力数">入力 ${kg}/${KENGAKU.length}</span>`;
     return `<a href="${tabHref(t)}"${t === tab ? ' aria-current="page"' : ''}>${l}${badge}</a>`;
   }).join('');
@@ -438,10 +439,45 @@ function formKG(c) {
   return section(`現場見学・ヒアリングの記録<span class="muted" data-live="kgc">${kengakuCount(c)}/${KENGAKU.length}項目</span>`, `<div class="kg">${rows}</div>`, `③の完了には${REQ.a3.kengakuMin}項目以上が必要です。不明なら「不明」と書けば、次の見学で確認すべき点として残ります。`);
 }
 
+/* ---- 課題と対応の記録 ----
+   「課題を見つける → 対応する → 効いたか確かめる」までを1か所に残す。
+   AI求人診断が出した指摘も、ボタン1つでここに取り込める。 */
+function issuesPanel(c) {
+  const list = (c.issues || []).slice().sort((a, b) => (a.state === 'done') - (b.state === 'done') || String(b.at).localeCompare(String(a.at)));
+  const open = openIssues(c);
+  const card = i => {
+    const acts = (i.actions || []).slice().sort((a, b) => String(b.at).localeCompare(String(a.at)));
+    const tone = i.state === 'done' ? 'ok' : i.state === 'doing' ? 'info' : 'crit';
+    return `<li class="issue-card is-${i.state}">
+      <div class="ih">${chip(ISSUE_STATES[i.state] || '未着手', tone)}<b>${esc(i.area || 'その他')}</b><span class="spacer"></span><span class="small muted">${fmtD(i.at)} ${esc(i.by || '')}</span></div>
+      <p class="itext">${esc(i.text)}</p>
+      ${acts.length ? `<ul class="iacts">${acts.map(a => `<li><span class="when">${fmtD(a.at)} ${esc(a.by || '')}</span>${esc(a.text)}</li>`).join('')}</ul>` : ''}
+      ${i.result ? `<p class="iresult ${i.result.kind === 'better' ? 'ok' : 'warn'}">${i.result.kind === 'better' ? '◎ 改善した' : '△ 変わらなかった'}　<span class="small muted">${fmtD(i.result.at)} ${esc(i.result.by || '')}</span></p>` : ''}
+      <div class="row irow">
+        ${i.state !== 'done' ? `<input class="inp iact" id="ia-${i.id}" placeholder="何をしたかを書いて「対応した」を押す（例：時給を1,350円に上げた）">
+        <button class="btn sm primary" data-act="iact" data-id="${i.id}">対応した</button>` : ''}
+        ${i.state !== 'done' && acts.length ? `<button class="btn sm" data-act="idone" data-id="${i.id}" data-kind="better">改善した</button>
+        <button class="btn sm" data-act="idone" data-id="${i.id}" data-kind="same">変わらない</button>` : ''}
+        ${i.state === 'done' ? `<button class="btn sm" data-act="ireopen" data-id="${i.id}">もう一度対応する</button>` : ''}
+        <span class="spacer"></span><button class="btn sm ghost" data-act="idel" data-id="${i.id}">削除</button>
+      </div></li>`;
+  };
+  const add = `<div class="iadd">
+    <div class="row">
+      <select class="inp" id="iarea" style="width:150px" aria-label="課題の種類">${ISSUE_AREAS.map(a => `<option>${esc(a)}</option>`).join('')}</select>
+      <input class="inp" id="itext" placeholder="何が問題かを書く（例：クリックはあるのに応募が0）">
+      <button class="btn primary" data-act="iadd">課題を追加</button>
+    </div></div>`;
+  return section(`課題と対応<span class="muted">${open.length ? `未解決 ${open.length}件` : 'なし'}</span>`,
+    `<p class="small muted" style="margin:0 0 12px">見つけた課題と、やった対応と、効いたかどうかを残します。次に同じ案件を見る人が、過去の経緯から判断できるようにするためです。</p>
+     ${add}
+     <ul class="issues">${list.length ? list.map(card).join('') : '<li class="muted" style="padding:14px 0">まだありません。上の欄から追加できます。AI求人診断の指摘からも取り込めます。</li>'}</ul>`);
+}
+
 /* ---- 履歴・管理 ---- */
 function formLog(c) {
   const hist = (c.history || []).filter(h => h.type !== 'note');
-  return section('求人広告・応募シートとの紐づけ', fg(
+  return issuesPanel(c) + section('求人広告・応募シートとの紐づけ', fg(
     `<div class="f w2"><label for="adcodes">求人の案件番号（1行に1つ）</label><textarea id="adcodes" data-p-adcodes rows="3" class="inp" placeholder="698&#10;240">${esc((c.adCodes || []).join('\n'))}</textarea><small>Indeedの求人メモ先頭の番号、求人ボックスの勤務先名「plus-I-698」の番号。取り込んだ広告の求人数・表示・応募をこの案件に集計します。現在の一致：${esc(adGroupsFor(c).map(g => Object.keys(g.media)[0] + ' ' + g.name).slice(0, 6).join('、') || 'なし')}</small></div>`,
     `<div class="f w2"><label for="aliases">案件名の別名（応募シート・広告の名称、1行に1つ）</label><textarea id="aliases" data-p-aliases rows="3" class="inp" placeholder="${esc(c.company.name)}">${esc((c.aliases || []).join('\n'))}</textarea><small>拠点シートの「希望勤務先名」にこの語を含む応募を、この案件の実績として数えます。空欄なら企業名で照合。現在の一致：${statsFor(c).names.slice(0, 8).map(esc).join('、') || 'なし'}</small></div>`,
     `<div class="f wf"><span class="lb">導入前の既存案件</span><div class="checks"><label><input type="checkbox" data-p="legacy" data-bool${c.legacy ? ' checked' : ''}>旧運用（稟議・③は紙で実施済み）</label></div><small>チェックすると「稟議未上申」「③未入力」の警告を出しません。③を入力完了すると通常の案件に戻ります。</small></div>`,

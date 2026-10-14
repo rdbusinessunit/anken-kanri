@@ -28,6 +28,11 @@ const DEFAULT_CONFIG = {
     ],
   },
 };
+/* 課題の区分。AI求人診断の issues[].area と同じ語を使う */
+const ISSUE_AREAS = ['時給', '勤務形態', '仕事内容', '年齢条件', '掲載・媒体', '原稿', '職場環境', 'その他'];
+const ISSUE_STATES = { open: '未着手', doing: '対応中', done: '完了' };
+const openIssues = c => (c.issues || []).filter(i => i.state !== 'done');
+
 const OPT = {
   torihiki: ['有', '無'],
   shubetsu: ['再新規', '新規', '既存', '再契約'],
@@ -282,6 +287,8 @@ function newCase() {
     facilities: { checks: [], shokudoNote: '', otherNote: '' },
     setsumei: { officeTanto: '', uniform: [], training: 'キャリア形成支援に基づくe-ラーニング制度', notes: '' },
     kengaku: {},
+    /* 課題と対応の記録。{id, area, text, at, by, state, actions:[], result} */
+    issues: [],
     merit: { notes: '' },
     aliases: [], adCodes: [],
     market: { wage: '', note: '' },
@@ -304,6 +311,7 @@ function normalizeCase(c) {
     return np;
   });
   out.kengaku = { ...(c.kengaku || {}) };
+  out.issues = (c.issues || []).map(i => ({ actions: [], ...i }));
   const om = c.merit || {}; const kg = out.kengaku;
   out.merit = { notes: om.notes || '' };
   if (!c.merit && kg.q05 && out.positions.every(p => !p.product)) out.positions.forEach(p => { p.product = kg.q05; });
@@ -448,6 +456,7 @@ function alertsFor(c) {
   }
   if (f.ringi.changedAfterApproval) a.push({ tone: 'warn', text: '承認後に単価・条件が変更されています（再稟議を検討）' });
   if (c.pendingRd) a.push({ tone: 'info', text: 'RDが未確認の変更があります' });
+  { const n = openIssues(c).filter(i => i.state === 'open').length; if (n) a.push({ tone: 'warn', text: `課題が${n}件、未着手のままです` }); }
   postingsOf(c.id).forEach(p => {
     if (p.status === '停止' || !p.nextFix) return;
     const d = daysUntil(p.nextFix);

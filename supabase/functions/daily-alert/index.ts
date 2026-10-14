@@ -68,6 +68,8 @@ function alertsFor(c: any, postings: any[], ringiDays: number) {
   }
   if (f.ringi?.changedAfterApproval) a.push({ tone: "warn", text: "承認後に単価・条件が変更されています（再稟議を検討）" });
   if (c.pendingRd) a.push({ tone: "info", text: "RDが未確認の変更があります" });
+  const openIssues = (c.issues ?? []).filter((i: any) => i.state === "open").length;
+  if (openIssues) a.push({ tone: "warn", text: `課題が${openIssues}件、未着手のままです` });
   for (const p of postings) {
     if (p.caseId !== c.id || p.status === "停止" || !p.nextFix) continue;
     const d = daysUntil(p.nextFix);

@@ -78,7 +78,7 @@ function refreshFlow() {
   const stored = r.view === 'new' ? null : S.cases[S.draft.id] ? normalizeCase(S.cases[S.draft.id]) : null;
   const fl = $('[data-live="flow"]'); if (fl) fl.innerHTML = flowPanel(S.draft, stored);
   const isNew = r.view === 'new'; const tab = TABS.some(t => t[0] === r.tab) ? r.tab : 'a1';
-  const tb = $('[data-live="tabs"]'); if (tb) tb.innerHTML = tabsHTML(S.draft, tab, t => isNew ? `#/new/_/${t}` : `#/case/${S.draft.id}/${t}`);
+  const tb = $('[data-live="tabs"]'); if (tb) tb.innerHTML = tabsHTML(S.draft, tab, t => isNew ? `#/new/_/${t}` : `#/case/${S.draft.id}/${t}`, isNew);
 }
 function refreshLive() {
   $$('[data-live]').forEach(el => {
@@ -258,6 +258,66 @@ const ACT = {
   kbai() { if (!needMe()) kbAI(); },
   adsort(b) { S.adf.sort = b.dataset.v; rerender(); },
   adst(b) { S.adf.st = b.dataset.v; rerender(); },
+  /* 課題と対応の記録。どれも押した時点で保存する（下書きの「保存」を待たせない） */
+  async iadd() {
+    const id = curId(); if (needMe()) return;
+    const text = ($('#itext').value || '').trim();
+    if (!text) { toast('何が問題かを書いてください', 'warn'); $('#itext').focus(); return; }
+    const area = $('#iarea').value || 'その他';
+    await mutate(id, c => {
+      c.issues = [{ id: uid(), area, text, at: nowISO(), by: S.me, state: 'open', actions: [] }, ...(c.issues || [])];
+    }, `課題を追加：${area}　${text}`);
+    rerender();
+  },
+  async iact(b) {
+    const id = curId(); if (needMe()) return;
+    const el = $('#ia-' + b.dataset.id); const text = ((el && el.value) || '').trim();
+    if (!text) { toast('何をしたかを書いてください', 'warn'); if (el) el.focus(); return; }
+    await mutate(id, c => {
+      const i = (c.issues || []).find(x => x.id === b.dataset.id); if (!i) return;
+      i.actions = [{ at: nowISO(), by: S.me, text }, ...(i.actions || [])];
+      i.state = 'doing';
+    }, `対応：${text}`);
+    rerender();
+  },
+  async idone(b) {
+    const id = curId(); if (needMe()) return;
+    const kind = b.dataset.kind;
+    await mutate(id, c => {
+      const i = (c.issues || []).find(x => x.id === b.dataset.id); if (!i) return;
+      i.state = 'done'; i.result = { kind, at: nowISO(), by: S.me };
+    }, kind === 'better' ? '課題を完了（改善した）' : '課題を完了（変わらなかった）');
+    rerender();
+  },
+  async ireopen(b) {
+    const id = curId(); if (needMe()) return;
+    await mutate(id, c => {
+      const i = (c.issues || []).find(x => x.id === b.dataset.id); if (!i) return;
+      i.state = 'doing'; delete i.result;
+    }, '課題を再開');
+    rerender();
+  },
+  async idel(b) {
+    const id = curId(); if (needMe()) return;
+    if (!confirm('この課題と、記録した対応をすべて削除します。よろしいですか。')) return;
+    await mutate(id, c => { c.issues = (c.issues || []).filter(x => x.id !== b.dataset.id); }, '課題を削除');
+    rerender();
+  },
+  /* AI求人診断の指摘を、そのまま課題として取り込む */
+  async iai(b) {
+    const id = b.dataset.id || curId(); if (needMe()) return;
+    if (!id || !S.cases[id]) { toast('案件が特定できませんでした', 'warn'); return; }
+    await mutate(id, c => {
+      const rv = (c.aiReview || {}).result || {};
+      const got = (rv.issues || []).map(x => ({
+        id: uid(), area: ISSUE_AREAS.includes(x.area) ? x.area : 'その他',
+        text: [x.finding, x.action && '→ ' + x.action].filter(Boolean).join('　'),
+        at: nowISO(), by: S.me, state: 'open', actions: [], fromAi: true,
+      }));
+      c.issues = [...got, ...(c.issues || [])];
+    }, 'AI診断の指摘を課題に取り込み');
+    toast('AI診断の指摘を課題に追加しました'); rerender();
+  },
   adm(b) {
     const v = b.dataset.v; const inTable = !!b.closest('.seg-f');
     if (!inTable && !AD_MEDIA.includes(v)) { toast(`${v}は手入力の掲載です。下の「台帳の案件」で案件ごとの件数を見られます`); return; }
