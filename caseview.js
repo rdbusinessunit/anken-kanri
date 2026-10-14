@@ -61,11 +61,12 @@ function viewList() {
   const attnHTML = attn.length ? `<section class="attn"><h2>いま対応が必要な案件<span class="cnt">${attn.length}件</span></h2><ul>${attn.slice(0, 12).map(a => `<li><a href="#/case/${a.c.id}"><span class="sev ${a.tone}"></span><span><span class="nm">${esc(caseName(a.c))}</span><span class="msg">${esc(a.text)}</span></span><span class="go">${esc(a.c.tanto || '')}</span></a></li>`).join('')}</ul>${attn.length > 12 ? `<p class="small muted">ほか${attn.length - 12}件</p>` : ''}</section>` : '';
   const st = c => { const s = stage(c); return chip(s.label, s.tone); };
   const pc = c => sum(postingsOf(c.id).filter(p => p.status !== '停止').map(p => +p.count || 0));
-  const table = `<div class="scroll-x tbl-wide"><table class="list"><thead><tr><th>案件</th><th>段階</th><th>進捗</th><th>原価率</th><th>面接・進捗報告</th><th style="text-align:right">求人数</th><th style="text-align:right">応募 直近3ヶ月</th><th>更新</th></tr></thead><tbody>
+  const table = `<div class="scroll-x tbl-wide"><table class="list"><thead><tr><th>案件</th><th>段階</th><th style="text-align:right">原価率</th><th>面接</th><th style="text-align:right">求人数</th><th style="text-align:right">応募<br><span class="thsub">直近3ヶ月</span></th><th>更新</th></tr></thead><tbody>
     ${rows.map(c => { const g = gate(c); const s = statsFor(c); return `<tr class="click" data-href="#/case/${c.id}">
       <td><div class="cname"><a href="#/case/${c.id}">${esc(caseName(c))}</a>${S.kept[c.id] ? ' <span class="chip warn plain">未保存あり</span>' : ''}</div><div class="cmeta">${esc(c.kyoten || '拠点未設定')} ・ ${esc(c.tanto || '担当未設定')} ・ 受注 ${fmtD(c.juchuDate)}</div></td>
-      <td>${st(c)}</td><td>${trkHTML(c)}</td><td>${gaugeHTML(g.max)}</td>
-      <td>${c.flow.closed ? '' : interviewOK(c) ? chip('可', 'ok') : chip('停止（③未入力）', c.legacy ? '' : 'crit')}</td>
+      <td>${st(c)}</td>
+      <td class="n rate ${g.max == null ? '' : g.max * 100 > cfg().threshold ? 'over' : 'under'}" style="text-align:right">${g.max == null ? '<span class="muted">—</span>' : pct(g.max)}</td>
+      <td>${c.flow.closed ? '' : interviewOK(c) ? '<span class="ok-mark">可</span>' : `<span class="ng-mark" title="③詳細が未入力のため面接・進捗報告ができません">停止</span>`}</td>
       <td class="n" style="text-align:right">${pc(c) || '<span class="muted">—</span>'}</td>
       <td class="n" style="text-align:right">${s.recent || '<span class="muted">—</span>'}</td>
       <td class="small muted">${fmtMD(c.updatedAt)} ${esc(c.updatedBy || '')}</td></tr>`; }).join('')}

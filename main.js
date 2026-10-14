@@ -62,7 +62,7 @@ function applyTheme(v) {
 }
 function initTheme() {
   const sel = $('#theme'); if (!sel) return;
-  const v = lsGet('bring-theme') || 'auto';
+  const v = lsGet('bring-theme') || 'light';  /* 既定はライト。暗いと見づらいという声があったため */
   sel.value = v; applyTheme(v);
   sel.addEventListener('change', () => { lsSet('bring-theme', sel.value); applyTheme(sel.value); toast(`表示を「${sel.options[sel.selectedIndex].text}」にしました`); });
 }

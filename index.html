@@ -123,6 +123,17 @@ h1,h2,h3{text-wrap:balance;margin:0}
 .scroll-x{overflow-x:auto;-webkit-overflow-scrolling:touch}
 
 /* ---- list ---- */
+/* 案件一覧：数字そのものを色で語らせ、飾りの棒グラフは置かない */
+/* 段階は一覧でいちばん見る情報なので、大きめの色付きチップにする */
+.list td .chip{font-size:14px;padding:5px 13px}
+.list td .chip:not(.ok):not(.warn):not(.crit):not(.info){background:var(--accent-soft);color:var(--accent);border-color:transparent}
+.list .rate{font-size:17px;font-weight:700;font-variant-numeric:tabular-nums}
+.list .rate.under{color:var(--ok)}
+.list .rate.over{color:var(--crit)}
+.ok-mark,.ng-mark{display:inline-block;font-size:14px;font-weight:700;padding:3px 12px;border-radius:12px}
+.ok-mark{background:var(--ok-soft);color:var(--ok)}
+.ng-mark{background:var(--crit-soft);color:var(--crit)}
+.list th .thsub{display:block;font-weight:400;font-size:11.5px;color:var(--ink-3)}
 /* 対応が必要：最初に目に入る場所。色と大きさで「すぐやること」を伝える */
 .attn{margin-bottom:26px}
 .attn h2{display:flex;align-items:center;gap:10px;font-size:19px;font-weight:700;letter-spacing:0;color:var(--ink);margin-bottom:12px}
@@ -430,7 +441,7 @@ label.btn[for]{cursor:pointer}
 
 <script>
 /* 保存されたテーマを、画面が描かれる前に反映する */
-try { var t0 = localStorage.getItem('bring-theme'); if (t0 === 'light' || t0 === 'dark') document.documentElement.setAttribute('data-theme', t0); } catch (e) { }
+try { var t0 = localStorage.getItem('bring-theme') || 'light'; if (t0 === 'light' || t0 === 'dark') document.documentElement.setAttribute('data-theme', t0); } catch (e) { document.documentElement.setAttribute('data-theme', 'light'); }
 </script>
 <header class="top">
   <div class="top-in">
@@ -467,7 +478,7 @@ try { var t0 = localStorage.getItem('bring-theme'); if (t0 === 'light' || t0 ===
 /* 画面の更新が利用者に届くようにする仕組み
    ・JavaScriptは5分ごとに新しいものを取りにいく
    ・version.json の版番号がこのページより新しければ、自動で読み直す */
-const APP_VERSION = "202610141430";
+const APP_VERSION = "202610141438";
 (function () {
   var files = ["config.js","ref.js","core.js","caseview.js","docs.js","postings.js","ads.js","xlsxfill.js","main.js"];
   var q = "?v=" + Math.floor(Date.now() / 300000);
