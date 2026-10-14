@@ -53,6 +53,8 @@ a{color:var(--accent)}
 button,input,select,textarea{font:inherit;color:inherit}
 :focus-visible{outline:2px solid var(--accent);outline-offset:2px}
 .num,td.n{font-variant-numeric:tabular-nums}
+table.list td.n,table.list th{white-space:nowrap}
+table.ptab td.n{white-space:nowrap}
 h1,h2,h3{text-wrap:balance;margin:0}
 
 /* ---- shell ---- */
@@ -478,7 +480,7 @@ try { var t0 = localStorage.getItem('bring-theme') || 'light'; if (t0 === 'light
 /* 画面の更新が利用者に届くようにする仕組み
    ・JavaScriptは5分ごとに新しいものを取りにいく
    ・version.json の版番号がこのページより新しければ、自動で読み直す */
-const APP_VERSION = "202610141438";
+const APP_VERSION = "202610141443";
 (function () {
   var files = ["config.js","ref.js","core.js","caseview.js","docs.js","postings.js","ads.js","xlsxfill.js","main.js"];
   var q = "?v=" + Math.floor(Date.now() / 300000);
