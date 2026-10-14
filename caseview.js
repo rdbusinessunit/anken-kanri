@@ -126,7 +126,7 @@ function viewCase(r) {
       <h1>${esc(c.company.name || '新規案件')}${c.company.plant ? `<small>${esc(c.company.plant)}</small>` : ''}</h1>
       <div class="row small muted" style="margin-top:4px">${isNew ? '' : chip(s.label, s.tone)}<span>営業担当 ${esc(c.tanto || '—')}</span><span>受注 ${fmtD(c.juchuDate)}</span>${c.legacy ? chip('導入前の既存案件') : ''}</div>
     </div>
-    ${isNew ? '' : `<div class="row"><a class="btn" href="#/doc/${c.id}/ringi">帳票を見る</a><a class="btn" href="#/postings?case=${c.id}">求人管理</a></div>`}
+    ${isNew ? '' : `<div class="row"><a class="btn" href="#/doc/${c.id}/ringi" title="入力した内容から、稟議書・勤務説明書・簡易求人票をExcelで作ります">書類を作る（稟議書・勤務説明書）</a><a class="btn" href="#/postings?case=${c.id}" title="この案件が今どの媒体に何件出ていて、応募が何件あるかを見ます">掲載と応募を見る</a></div>`}
   </div>
   <div class="casegrid">
     <aside class="flowcol" data-live="flow">${flowPanel(c, stored)}</aside>
