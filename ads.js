@@ -283,7 +283,7 @@ function viewAds() {
       <li><b>Indeed</b>：広告配信実績（求人ごと）のCSV。求人メモ先頭の番号と名称で案件を分けます。</li>
       <li><b>求人ボックス</b>：採用ボードの<b>求人一覧CSV</b>（saiyoboard_kyujin_…）と、管理画面の<b>求人別CSV</b>（…_求人別_開始日_終了日）を一緒に選んでください。求人一覧で案件を分け、求人別で表示・クリック・応募を付けます。</li>
     </ul>
-    <h3 style="font-size:12px;letter-spacing:.08em;color:var(--ink-2);margin-top:16px">取り込み済み</h3>${current}
+    <h3 style="font-size:14.5px;letter-spacing:.08em;color:var(--ink-2);margin-top:16px">取り込み済み</h3>${current}
   </div>
   ${P ? impPreview(P) : ''}`;
 }
@@ -302,7 +302,7 @@ function impPreview(P) {
   const kbTot = P.kb ? sum(Object.values(P.kb.byKyoten).map(v => v.n)) : 0, kbHold = P.kb ? sum(Object.values(P.kb.byKyoten).map(v => v.hold)) : 0;
   const phones = P.kb ? Object.entries(P.kb.phones) : [];
   return `<section class="panel" style="padding:16px 18px;margin-bottom:18px">
-    <div class="row"><h2 style="font-size:15px">取り込む内容の確認</h2><span class="spacer"></span><button class="btn primary" data-act="impsave"${P.reportOnlyNoBase && !P.indeed.length ? ' disabled' : ''}>この内容で取り込む</button></div>
+    <div class="row"><h2 style="font-size:17px">取り込む内容の確認</h2><span class="spacer"></span><button class="btn primary" data-act="impsave"${P.reportOnlyNoBase && !P.indeed.length ? ' disabled' : ''}>この内容で取り込む</button></div>
     <div style="margin:8px 0 12px">${files}</div>
     ${warn.map(w => `<div class="banner warn">${esc(w)}</div>`).join('')}
     ${P.kb ? `<p class="small muted" style="margin:0 0 10px">求人ボックス：公開中 ${kbTot.toLocaleString()}件・掲載保留 ${kbHold.toLocaleString()}件（募集停止・下書きは数えません）。拠点は「勤務先名のplus-I等」→「応募受付の電話番号」${phones.length ? `（${phones.map(([p, k]) => `${p}＝${k}`).join('、')}）` : ''}→「Indeedの同名案件」の順で判定しています。</p>` : ''}
@@ -318,7 +318,7 @@ function kbNameTool(P) {
   const names = [...new Set([...P.indeedGroups.map(g => g.name), ...P.kb.groups.filter(g => g.name).map(g => g.name), ...Object.values(S.cases).map(c => c.company.name)].filter(Boolean))];
   const ai = I.ai;
   return `<section class="panel" style="padding:16px 18px">
-    <div class="row"><h2 style="font-size:15px">求人ラベルのない求人ボックス求人に案件名を付ける</h2><span class="spacer"></span><button class="btn sm primary" data-act="kbnamesave">名前を保存</button></div>
+    <div class="row"><h2 style="font-size:17px">求人ラベルのない求人ボックス求人に案件名を付ける</h2><span class="spacer"></span><button class="btn sm primary" data-act="kbnamesave">名前を保存</button></div>
     <p class="small muted" style="margin:6px 0 12px;max-width:85ch">採用ボードで求人ラベルが空の求人は、勤務地×時給でまとめています（未命名 ${unnamed.length}件）。一度名前を付ければ次回の取込でも自動で使います。採用ボードで求人ラベルを付けて入稿すれば、この作業は不要になります。</p>
     <div id="kbaimsg">${ai ? (ai.busy ? '<p class="small muted">AIが候補を考えています…（1分ほど）</p>' : ai.err ? `<p class="small" style="color:var(--crit)">${esc(ai.err)}</p>` : `<p class="small muted">AIの候補を入れました（${ai.n}件）。確認してから「名前を保存」を押してください。</p>`) : ''}</div>
     <datalist id="dl-adnames">${names.map(n => `<option value="${esc(n)}">`).join('')}</datalist>

@@ -55,7 +55,7 @@ function viewList() {
   let rows = all.filter(c => (!F.kyoten || c.kyoten === F.kyoten) && (!F.tanto || c.tanto === F.tanto) && (!F.stage || stage(c).k === F.stage) && (!F.q || norm(caseName(c) + c.tanto).includes(norm(F.q))));
   rows.sort((a, b) => (a.flow.closed - b.flow.closed) || String(b.updatedAt).localeCompare(String(a.updatedAt)));
   const kyos = C.kyotens.map(k => k.id);
-  const attnHTML = attn.length ? `<section class="attn"><h2>対応が必要（${attn.length}件）</h2><ul>${attn.slice(0, 12).map(a => `<li><a href="#/case/${a.c.id}"><span class="sev ${a.tone}"></span><span class="nm">${esc(caseName(a.c))}</span><span class="msg">${esc(a.text)}</span><span class="go small muted">${esc(a.c.tanto || '')}</span></a></li>`).join('')}</ul>${attn.length > 12 ? `<p class="small muted">ほか${attn.length - 12}件</p>` : ''}</section>` : '';
+  const attnHTML = attn.length ? `<section class="attn"><h2>いま対応が必要な案件<span class="cnt">${attn.length}件</span></h2><ul>${attn.slice(0, 12).map(a => `<li><a href="#/case/${a.c.id}"><span class="sev ${a.tone}"></span><span><span class="nm">${esc(caseName(a.c))}</span><span class="msg">${esc(a.text)}</span></span><span class="go">${esc(a.c.tanto || '')}</span></a></li>`).join('')}</ul>${attn.length > 12 ? `<p class="small muted">ほか${attn.length - 12}件</p>` : ''}</section>` : '';
   const st = c => { const s = stage(c); return chip(s.label, s.tone); };
   const pc = c => sum(postingsOf(c.id).filter(p => p.status !== '停止').map(p => +p.count || 0));
   const table = `<div class="scroll-x tbl-wide"><table class="list"><thead><tr><th>案件</th><th>段階</th><th>進捗</th><th>原価率</th><th>面接・進捗報告</th><th style="text-align:right">求人数</th><th style="text-align:right">応募 直近3ヶ月</th><th>更新</th></tr></thead><tbody>
@@ -386,7 +386,7 @@ function formA3(c) {
       jobFields(i, p, true),
       fld(`positions.${i}.shiftNote`, '勤務時間の備考', 'text', { w: 'wf', ph: '例：生産の動向により2交替・3交替が変わることがある' }),
     )}
-    <div class="fs" style="padding-top:12px;border:0"><h3 style="font-size:12px">月の稼働と月収例</h3>${fg(
+    <div class="fs" style="padding-top:12px;border:0"><h3 style="font-size:14.5px">月の稼働と月収例</h3>${fg(
       fld(`positions.${i}.days`, '稼働日数', 'num', { unit: '日/月' }),
       fld(`positions.${i}.monthH`, '稼働時間', 'num', { unit: 'H/月', step: 0.5, ph: fmtH(suggestMonthH(p)) || '自動計算' }),
       fld(`positions.${i}.nightH`, '深夜時間', 'num', { unit: 'H/月', step: 0.5 }),
