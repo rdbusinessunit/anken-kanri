@@ -14,7 +14,22 @@
 type Json = Record<string, unknown>;
 
 const SB_URL = Deno.env.get("SUPABASE_URL")!;
-const SB_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+/* データを読むための鍵。Supabaseが自動で入れる環境変数は、プロジェクトの作成時期で
+   名前が違う（新しい方式は SUPABASE_SECRET_KEYS に JSON で入る）。どちらでも動くようにする。 */
+function serviceKey(): string {
+  const plain = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+  if (plain) return plain;
+  const json = Deno.env.get("SUPABASE_SECRET_KEYS");
+  if (json) {
+    try {
+      const o = JSON.parse(json);
+      const v = Object.values(o).find((x) => typeof x === "string" && x);
+      if (typeof v === "string") return v;
+    } catch { /* 形式が違えば次へ */ }
+  }
+  return Deno.env.get("SUPABASE_ANON_KEY") ?? "";
+}
+const SB_KEY = serviceKey();
 const RESEND_API_KEY = Deno.env.get("RESEND_API_KEY") ?? "";
 const MAIL_FROM = Deno.env.get("MAIL_FROM") ?? "";
 /* 画面のURL。メールから案件を直接開けるようにする */
@@ -121,6 +136,9 @@ async function send(to: string[], subject: string, html: string) {
 
 Deno.serve(async () => {
   try {
+    if (!SB_KEY) {
+      return Response.json({ ok: false, error: "データを読む鍵が見つかりません（SUPABASE_SERVICE_ROLE_KEY / SUPABASE_SECRET_KEYS / SUPABASE_ANON_KEY のいずれも未設定）" }, { status: 500 });
+    }
     if (!RESEND_API_KEY || !MAIL_FROM) {
       return Response.json({ ok: false, error: "RESEND_API_KEY か MAIL_FROM が未設定です" }, { status: 400 });
     }
