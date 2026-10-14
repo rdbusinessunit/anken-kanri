@@ -216,6 +216,9 @@ function viewSettings() {
       <div class="fg"><div class="f"><label for="c-th">原価率しきい値</label><div class="suffix"><input class="inp" id="c-th" type="number" step="5" min="0" value="${C.threshold}"><span>%</span></div><small>以下なら稟議前に求人発注可</small></div>
       <div class="f"><label for="c-fix">求人の修正間隔</label><div class="suffix"><input class="inp" id="c-fix" type="number" value="${C.fixDays}"><span>日</span></div></div>
       <div class="f"><label for="c-rd">稟議の遅れ警告</label><div class="suffix"><input class="inp" id="c-rd" type="number" value="${C.ringiDays}"><span>日</span></div></div></div></div>
+    <div class="panel"><h3>通知メール</h3><p>1行に1人：担当者名｜メールアドレス。毎朝、その人が担当する案件のうち「対応が必要」なものだけをメールで送ります。空欄の人には送りません。</p>${ta('c-mail', Object.entries((C.mail || {}).to || {}).map(([n, a]) => `${n}｜${a}`).join('\n'), 5)}
+      <p style="margin:10px 0 4px">まとめて受け取る宛先（1行に1つ）。全担当分の一覧が届きます。</p>${ta('c-mailcc', ((C.mail || {}).cc || []).join('\n'), 3)}
+      <div class="fg"><div class="f"><label for="c-mailon">送信</label><select class="inp" id="c-mailon"><option value="on"${(C.mail || {}).enabled ? ' selected' : ''}>送る</option><option value="off"${(C.mail || {}).enabled ? '' : ' selected'}>送らない</option></select><small>止めるときは「送らない」。アドレスは残ります</small></div></div></div>
     <div class="panel"><h3>勤務説明書の定型文</h3><p>入社時必要品・保険・注意事項（1行に1つ）。</p>${ta('c-hitsuyo', C.fixed.hitsuyo, 3)}${ta('c-hoken', C.fixed.hoken, 4)}${ta('c-notes', C.fixed.notes.join('\n'), 6)}</div>
     <div class="panel"><h3>応募シートの取込</h3><p>拠点シート（CSV・Shift_JIS）を選ぶと、案件ごとの応募・面接・入社の実績を更新します。応募者の氏名・年齢などの個人情報は保存せず、案件名ごとの件数だけを保存します。同じ拠点の古い集計は置き換えます。</p>
       <input type="file" id="csvin" accept=".csv,text/csv">
@@ -271,6 +274,12 @@ async function saveConfig() {
     staff: lines('c-staff'), media: lines('c-media'),
     approvers: lines('c-appr').map(split).map(([role, name = '']) => ({ role, name })),
     threshold: +$('#c-th').value || 65, fixDays: +$('#c-fix').value || 14, ringiDays: +$('#c-rd').value || 3,
+    /* 毎朝の通知メール。宛先はここに持ち、送信はSupabase側の定期実行が読む */
+    mail: {
+      enabled: $('#c-mailon').value === 'on',
+      to: Object.fromEntries(lines('c-mail').map(split).map(([n, a = '']) => [n, a]).filter(([n, a]) => n && a)),
+      cc: lines('c-mailcc'),
+    },
     fixed: { ...cfg().fixed, hitsuyo: $('#c-hitsuyo').value, hoken: $('#c-hoken').value, notes: lines('c-notes') },
   };
   await Store.put('config', 'main', next); toast('設定を保存しました');
