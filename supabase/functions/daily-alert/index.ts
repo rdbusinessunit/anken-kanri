@@ -138,14 +138,14 @@ Deno.serve(async (req) => {
   try {
     /* 呼び出し元が付けてきた鍵を使う。cronはservice key、手動テストはanon keyを付ける。
        どちらも anken_docs を読める（setup.sql で anon に select を許可しているため）。 */
-    const sent = (req.headers.get("Authorization") ?? "").replace(/^Bearer[ ]+/i, "").trim();
-    const key = sent || ENV_KEY;
+    const callerKey = (req.headers.get("Authorization") ?? "").replace(/^Bearer[ ]+/i, "").trim();
+    const key = callerKey || ENV_KEY;
     /* ?debug=1 で、どの環境変数が来ているかだけ返す（値は出さない） */
     if (new URL(req.url).searchParams.get("debug")) {
       const names = ["SUPABASE_URL", "SUPABASE_SERVICE_ROLE_KEY", "SUPABASE_SECRET_KEYS", "SUPABASE_ANON_KEY", "SUPABASE_PUBLISHABLE_KEYS", "RESEND_API_KEY", "MAIL_FROM", "APP_URL"];
       return Response.json({
         env: Object.fromEntries(names.map((n) => [n, (Deno.env.get(n) ?? "").length])),
-        使う鍵: sent ? "呼び出し元のもの" : ENV_KEY ? "環境変数のもの" : "なし",
+        使う鍵: callerKey ? "呼び出し元のもの" : ENV_KEY ? "環境変数のもの" : "なし",
         鍵の形: key ? key.slice(0, 7) + "…(" + key.length + "文字)" : "",
       });
     }
