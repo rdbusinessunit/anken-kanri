@@ -26,7 +26,7 @@ function viewPostings() {
   const docs = adDocs();
   const srcLine = docs.length ? docs.map(d => `${d.media}${d.kyoten ? '（' + d.kyoten + '）' : ''} ${d.period || fmtD(d.importedAt)}`).join('　') : '';
   // 媒体別の件数（取込データのある媒体は取込から、ない媒体は手入力の掲載から）
-  const F0 = S.adf || (S.adf = { q: '', sort: 'n', media: '' });
+  const F0 = S.adf || (S.adf = { q: '', sort: 'n', media: '', st: '' });
   const inK = s => !pk || s.kyoten === pk;
   const mRows = media.map(m => {
     if (adLoaded(m)) {
@@ -54,16 +54,26 @@ function viewPostings() {
   const caseList = Object.values(S.cases).map(normalizeCase);
   const siteRows = sites.filter(s => (!pk || s.kyoten === pk) && (!sq || norm(s.name + s.codes.join(' ')).includes(sq)) && (!fm || (s.media[fm] && s.media[fm].n)))
     .map(s => { const all = zeroM(); (fm ? [s.media[fm]] : Object.values(s.media)).forEach(x => { for (const k of METRICS) all[k] += x[k] || 0; }); return { s, all, cs: caseList.filter(c => s.groups.some(g => matchCaseAd(c, g))) }; })
-    .sort((a, b) => F.sort === 'apply' ? b.all.apply - a.all.apply : F.sort === 'cost' ? b.all.cost - a.all.cost : b.all.n - a.all.n);
+    .sort((a, b) => F.sort === 'apply' ? b.all.apply - a.all.apply : F.sort === 'cost' ? b.all.cost - a.all.cost : b.all.n - a.all.n)
+    /* 「要対応だけ」= 掲載されているのに応募につながっていないもの */
+    .filter(({ all }) => F.st !== 'todo' || (all.imp > 0 && !all.apply));
+  /* 案件の状態。数字を見比べなくても、どこに手を打つべきかが分かるようにする。
+     判断ではなく事実だけで分ける（しきい値は置かない）。 */
+  const siteState = a => !a.imp ? { t: '掲載なし', k: '' }
+    : !a.click ? { t: 'クリックなし', k: 'warn' }
+    : !a.apply ? { t: '応募なし', k: 'crit' }
+    : { t: '応募あり', k: 'ok' };
   const siteTable = sites.length ? `<section class="sites" id="sites"><div class="row" style="margin:26px 0 8px"><h2 style="font-size:17px">${fm ? `${esc(fm)}に出ている案件（${siteRows.length}案件）` : '案件別・媒体別の求人数'}</h2><span class="small muted">${esc(srcLine)}</span><span class="spacer"></span>
       <div class="seg-f" role="group" aria-label="媒体">${[['', '全媒体'], ...AD_MEDIA.filter(adLoaded).map(m => [m, m])].map(([k, l]) => `<button data-act="adm" data-v="${esc(k)}" aria-pressed="${fm === k}">${esc(l)}</button>`).join('')}</div>
       <input class="inp" style="width:200px" type="search" data-adf="q" value="${esc(F.q)}" placeholder="案件名・番号で検索" aria-label="案件を検索">
+      <div class="seg-f" role="group" aria-label="絞り込み">${[['', 'すべて'], ['todo', '要対応だけ']].map(([k, l]) => `<button data-act="adst" data-v="${k}" aria-pressed="${F.st === k}">${l}</button>`).join('')}</div>
       <div class="seg-f" role="group" aria-label="並び順">${[['n', '求人数'], ['apply', '応募'], ['cost', '費用']].map(([k, l]) => `<button data-act="adsort" data-v="${k}" aria-pressed="${F.sort === k}">${l}順</button>`).join('')}</div></div>
-    <div class="scroll-x"><table class="list"><thead><tr><th>拠点</th><th>案件</th>${AD_MEDIA.map(m => `<th style="text-align:right">${mtag(m)}</th>`).join('')}<th style="text-align:right">表示</th><th style="text-align:right">クリック</th><th style="text-align:right">CTR</th><th style="text-align:right">応募</th><th style="text-align:right">費用</th><th style="text-align:right">応募単価</th><th>台帳</th></tr></thead><tbody>
-    ${siteRows.slice(0, 120).map(({ s, all, cs }) => `<tr><td class="small">${esc(s.kyoten)}</td><td><div class="cname" style="font-size:15px">${esc(s.name)}</div>${s.codes.length ? `<div class="cmeta">番号 ${s.codes.slice(0, 8).map(esc).join('・')}${s.codes.length > 8 ? '…' : ''}</div>` : ''}</td>
+    <p class="legend"><b>色の意味</b>${[['crit', '応募なし', 'クリックはあるのに応募が0。原稿か条件の見直し'], ['warn', 'クリックなし', '表示はされているのに押されていない。タイトルの見直し'], ['', '掲載なし', '表示が0。掲載・予算の確認'], ['ok', '応募あり', '問題なし']].map(([k, t, d]) => `<span>${chip(t, k)}${d}</span>`).join('')}</p>
+    <div class="scroll-x"><table class="list"><thead><tr><th>拠点</th><th>案件</th><th>状態</th>${AD_MEDIA.map(m => `<th style="text-align:right">${mtag(m)}</th>`).join('')}<th style="text-align:right">表示</th><th style="text-align:right">クリック</th><th style="text-align:right">CTR</th><th style="text-align:right">応募</th><th style="text-align:right">費用</th><th style="text-align:right">応募単価</th><th>台帳</th></tr></thead><tbody>
+    ${siteRows.slice(0, 120).map(({ s, all, cs }) => { const st = siteState(all); return `<tr class="st-${st.k || 'none'}"><td class="small">${esc(s.kyoten)}</td><td><div class="cname" style="font-size:15px">${esc(s.name)}</div>${s.codes.length ? `<div class="cmeta">番号 ${s.codes.slice(0, 8).map(esc).join('・')}${s.codes.length > 8 ? '…' : ''}</div>` : ''}</td><td>${chip(st.t, st.k)}</td>
       ${AD_MEDIA.map(m => { const x = s.media[m]; return `<td class="n" style="text-align:right">${x && (x.n || x.hold) ? `<b>${x.n}</b>${x.hold ? `<div class="small muted">保留${x.hold}</div>` : ''}` : '<span class="muted">—</span>'}</td>`; }).join('')}
       <td class="n" style="text-align:right">${all.imp.toLocaleString()}</td><td class="n" style="text-align:right">${all.click.toLocaleString()}</td><td class="n small" style="text-align:right">${all.imp ? pct(all.click / all.imp) : ''}</td><td class="n" style="text-align:right;font-weight:700">${all.apply || '—'}</td><td class="n" style="text-align:right">${all.cost ? yen(all.cost) : '—'}</td><td class="n small" style="text-align:right">${all.apply ? yen(all.cost / all.apply) : ''}</td>
-      <td class="small">${cs.length ? cs.map(c => `<a href="#/case/${c.id}">${esc(caseName(c))}</a>`).join('<br>') : `<a class="btn sm" href="#/new?name=${encodeURIComponent(s.named ? s.name : '')}&kyoten=${encodeURIComponent(isUnk(s.kyoten) ? '' : s.kyoten)}&code=${encodeURIComponent(s.codes.join(','))}">登録</a>`}</td></tr>`).join('')}
+      <td class="small">${cs.length ? cs.map(c => `<a href="#/case/${c.id}">${esc(caseName(c))}</a>`).join('<br>') : `<a class="btn sm" href="#/new?name=${encodeURIComponent(s.named ? s.name : '')}&kyoten=${encodeURIComponent(isUnk(s.kyoten) ? '' : s.kyoten)}&code=${encodeURIComponent(s.codes.join(','))}">登録</a>`}</td></tr>`; }).join('')}
     </tbody></table></div>${siteRows.length > 120 ? `<p class="small muted">ほか${siteRows.length - 120}件。検索で絞り込んでください。</p>` : ''}
     <p class="small muted">同じ現場の求人は1行にまとめています（例：Indeedの「日立建機龍ヶ崎フォークリフト」は求人ボックスのラベル「日立建機龍ヶ崎」の行へ）。表示・応募・費用は各CSVの集計期間の合計です。</p></section>` : '';
   // 台帳の案件ボード

@@ -340,6 +340,14 @@ table.form .pstamp.ng{border-color:#94600E;color:#94600E}
 }
 
 /* ---- postings ---- */
+/* 求人管理：どの案件に手を打つべきかを色で示す */
+.legend{display:flex;flex-wrap:wrap;gap:8px 20px;align-items:center;margin:0 0 10px;font-size:13.5px;color:var(--ink-2)}
+.legend>b{font-size:14px;color:var(--ink)}
+.legend span{display:inline-flex;align-items:center;gap:7px}
+tr.st-crit td:first-child{box-shadow:inset 4px 0 0 var(--crit)}
+tr.st-warn td:first-child{box-shadow:inset 4px 0 0 var(--warn)}
+tr.st-crit{background:color-mix(in srgb,var(--crit-soft) 28%,transparent)}
+tr.st-warn{background:color-mix(in srgb,var(--warn-soft) 28%,transparent)}
 .tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:1px;background:var(--line);border:1px solid var(--line);border-radius:var(--r);overflow:hidden;margin-bottom:18px}
 .tile{background:var(--surface);padding:12px 16px}
 .tile .k{font-size:13px;color:var(--ink-3);font-weight:700;letter-spacing:.06em}
@@ -439,7 +447,7 @@ try { var t0 = localStorage.getItem('bring-theme'); if (t0 === 'light' || t0 ===
 /* 画面の更新が利用者に届くようにする仕組み
    ・JavaScriptは5分ごとに新しいものを取りにいく
    ・version.json の版番号がこのページより新しければ、自動で読み直す */
-const APP_VERSION = "202610141353";
+const APP_VERSION = "202610141404";
 (function () {
   var files = ["config.js","ref.js","core.js","caseview.js","docs.js","postings.js","ads.js","xlsxfill.js","main.js"];
   var q = "?v=" + Math.floor(Date.now() / 300000);

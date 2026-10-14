@@ -257,6 +257,7 @@ const ACT = {
   kbnamesave: () => kbNameSave(),
   kbai() { if (!needMe()) kbAI(); },
   adsort(b) { S.adf.sort = b.dataset.v; rerender(); },
+  adst(b) { S.adf.st = b.dataset.v; rerender(); },
   adm(b) {
     const v = b.dataset.v; const inTable = !!b.closest('.seg-f');
     if (!inTable && !AD_MEDIA.includes(v)) { toast(`${v}は手入力の掲載です。下の「台帳の案件」で案件ごとの件数を見られます`); return; }
