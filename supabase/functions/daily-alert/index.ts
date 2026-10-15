@@ -17,23 +17,14 @@
 
 type Json = Record<string, unknown>;
 
-const SB_URL = Deno.env.get("SUPABASE_URL")!;
-/* データを読むための鍵。Supabaseが自動で入れる環境変数は、プロジェクトの作成時期で
-   名前が違う（新しい方式は SUPABASE_SECRET_KEYS に JSON で入る）。どちらでも動くようにする。 */
-function serviceKey(): string {
-  const plain = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
-  if (plain) return plain;
-  const json = Deno.env.get("SUPABASE_SECRET_KEYS");
-  if (json) {
-    try {
-      const o = JSON.parse(json);
-      const v = Object.values(o).find((x) => typeof x === "string" && x);
-      if (typeof v === "string") return v;
-    } catch { /* 形式が違えば次へ */ }
-  }
-  return Deno.env.get("SUPABASE_ANON_KEY") ?? "";
-}
-const ENV_KEY = serviceKey();
+const SB_URL = Deno.env.get("SUPABASE_URL") ?? "https://wmxsuggeudkxewjhczam.supabase.co";
+/* データを読むための鍵。画面側の config.js と同じ公開キーを既定にする。
+   公開されて問題ない種類の鍵で、読み書きの制限はテーブル側のポリシーで管理している。
+
+   以前は「呼び出し元が付けてきた鍵」を使っていたが、Supabaseのテスト画面から呼ぶと
+   その画面の鍵ではテーブルを読めず403になった。誰が呼んでも同じ鍵で読むようにする。 */
+const SB_KEY = Deno.env.get("SB_KEY") ?? Deno.env.get("SUPABASE_ANON_KEY") ??
+  "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6IndteHN1Z2dldWRreGV3amhjemFtIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODc2MzYyNTEsImV4cCI6MjEwMzIxMjI1MX0.8c0uRXyDZ_vB04vQTQKynTcEGRNnXPmTgBsWcEYpPWw";
 const LINE_TOKEN = Deno.env.get("LINE_TOKEN") ?? "";
 const RESEND_API_KEY = Deno.env.get("RESEND_API_KEY") ?? "";
 const MAIL_FROM = Deno.env.get("MAIL_FROM") ?? "";
@@ -52,12 +43,12 @@ const daysUntil = (s: unknown) => {
   return d ? Math.ceil((d.getTime() - JST().getTime()) / 86400000) : 0;
 };
 
-async function loadColl(coll: string, key: string) {
+async function loadColl(coll: string) {
   const out: Json[] = [];
   for (let from = 0; ; from += 1000) {
     const res = await fetch(
       `${SB_URL}/rest/v1/anken_docs?select=id,data&coll=eq.${coll}&order=id`,
-      { headers: { apikey: key, Authorization: `Bearer ${key}`, Range: `${from}-${from + 999}` } },
+      { headers: { apikey: SB_KEY, Authorization: `Bearer ${SB_KEY}`, Range: `${from}-${from + 999}` } },
     );
     if (!res.ok) throw new Error(`${coll} を読めませんでした: ${res.status}`);
     const page = await res.json();
@@ -228,25 +219,16 @@ async function mailSend(to: string, subject: string, html: string): Promise<stri
 
 Deno.serve(async (req) => {
   try {
-    /* 呼び出し元が付けてきた鍵を使う。cronはservice key、手動テストはanon keyを付ける。
-       どちらも anken_docs を読める（テーブルのポリシーで anon に select を許可しているため）。 */
-    const callerKey = (req.headers.get("Authorization") ?? "").replace(/^Bearer[ ]+/i, "").trim();
-    const key = callerKey || ENV_KEY;
-    /* ?debug=1 で、どの環境変数が来ているかだけ返す（値は出さない） */
+    /* ?debug=1 で、鍵が入っているかだけ返す（値は出さない）。送信はしない */
     if (new URL(req.url).searchParams.get("debug")) {
-      const names = ["SUPABASE_URL", "SUPABASE_SERVICE_ROLE_KEY", "SUPABASE_SECRET_KEYS", "SUPABASE_ANON_KEY", "LINE_TOKEN", "RESEND_API_KEY", "MAIL_FROM", "APP_URL"];
+      const names = ["LINE_TOKEN", "RESEND_API_KEY", "MAIL_FROM", "APP_URL"];
       return Response.json({
-        env: Object.fromEntries(names.map((n) => [n, (Deno.env.get(n) ?? "").length])),
-        使う鍵: callerKey ? "呼び出し元のもの" : ENV_KEY ? "環境変数のもの" : "なし",
+        env: Object.fromEntries(names.map((n) => [n, (Deno.env.get(n) ?? "").length ? `${(Deno.env.get(n) ?? "").length}文字` : "空です"])),
         LINEの残り通数: await lineRemaining(),
       });
     }
-    if (!key) {
-      return Response.json({ ok: false, error: "データを読む鍵がありません" }, { status: 500 });
-    }
     const [cfgRows, caseRows, postRows, friendRows] = await Promise.all([
-      loadColl("config", key), loadColl("cases", key), loadColl("postings", key),
-      loadColl("linefriends", key),
+      loadColl("config"), loadColl("cases"), loadColl("postings"), loadColl("linefriends"),
     ]);
     const cfg: any = (cfgRows.find((r: any) => r.id === "main") as any)?.data ?? {};
     const line = cfg.line ?? {};
