@@ -214,6 +214,50 @@ ${JSON.stringify(caseBrief(c)).slice(0, 12000)}`;
 }
 
 /* ===== 設定 ===== */
+
+/* LINE通知の宛先。名前の一覧は line-webhook 関数が自動で作るので、
+   ここでは「誰が・どの範囲を受け取るか」を選ぶだけでよい。
+   LINEの無料プランは月200通・1通＝1人宛てなので、目安の通数も出しておく。 */
+const LINE_FREE = 200, LINE_DAYS = 22; /* 無料枠と、月あたりの配信日数（平日のみ） */
+function linePanel(C) {
+  const on = (C.line || {}).enabled;
+  const friends = Object.values(S.linefriends || {})
+    .sort((a, b) => (b.active !== false) - (a.active !== false)
+      || String(a.name || '').localeCompare(String(b.name || ''), 'ja'));
+  const using = friends.filter(f => f.active !== false && f.role && f.role !== 'off').length;
+  const need = using * LINE_DAYS;
+  const tone = need > LINE_FREE ? 'ng' : need > LINE_FREE * 0.9 ? 'warn' : 'ok';
+
+  const rows = friends.map(f => {
+    const gone = f.active === false;
+    const role = f.role || 'off';
+    const opt = (v, label) => `<option value="${v}"${role === v ? ' selected' : ''}>${label}</option>`;
+    const staff = [...new Set([...C.staff, f.tanto].filter(Boolean))];
+    return `<div class="lfrow${gone ? ' gone' : ''}">
+      <div class="lfname">${esc(f.name || '（名前が取れていません）')}${gone ? '<span class="lftag">友だち解除</span>' : ''}</div>
+      <select class="inp" data-lf="${esc(f.userId)}" data-lfk="role"${gone ? ' disabled' : ''} aria-label="受け取り方">
+        ${opt('off', '受け取らない')}${opt('tanto', '自分の担当分だけ')}${opt('all', '全担当のまとめ')}</select>
+      <select class="inp" data-lf="${esc(f.userId)}" data-lfk="tanto"${gone ? ' disabled' : ''} aria-label="担当者">
+        <option value="">この人は誰？</option>${staff.map(s => `<option${s === f.tanto ? ' selected' : ''}>${esc(s)}</option>`).join('')}</select>
+    </div>`;
+  }).join('');
+
+  const empty = `<div class="lfempty"><b>まだ誰も友だち追加していません。</b>
+    会社のLINE公式アカウントを友だち追加すると、ここに自動で名前が並びます。
+    並んだら、その人が誰なのかを選んでください。</div>`;
+
+  return `<div class="panel wide"><h3>LINE通知</h3>
+    <p>毎朝8時に「対応が必要な案件」をLINEに送ります。<b>受け取る人は、会社のLINE公式アカウントを友だち追加してください。</b></p>
+    <div class="fg"><div class="f"><label for="c-lineon">送信</label>
+      <select class="inp" id="c-lineon"><option value="on"${on ? ' selected' : ''}>送る</option><option value="off"${on ? '' : ' selected'}>送らない</option></select>
+      <small>止めるときは「送らない」。宛先は残ります</small></div></div>
+    ${friends.length ? rows : empty}
+    <div class="quota ${tone}">受け取る人 <b>${using}人</b>　→　月あたり最大 <b>${need}通</b>（無料枠 ${LINE_FREE}通）
+      ${tone === 'ng' ? '<br>無料枠を超えます。人を減らすか、有料プラン（月5,000円）が必要です'
+        : tone === 'warn' ? '<br>ぎりぎりです。これ以上増やすと超えます'
+        : '<br>無料枠に収まります'}</div></div>`;
+}
+
 function viewSettings() {
   const C = cfg(), st = S.stats;
   const ta = (id, v, rows = 6) => `<textarea id="${id}" rows="${rows}">${esc(v)}</textarea>`;
@@ -227,7 +271,8 @@ function viewSettings() {
       <div class="fg"><div class="f"><label for="c-th">原価率しきい値</label><div class="suffix"><input class="inp" id="c-th" type="number" step="5" min="0" value="${C.threshold}"><span>%</span></div><small>以下なら稟議前に求人発注可</small></div>
       <div class="f"><label for="c-fix">求人の修正間隔</label><div class="suffix"><input class="inp" id="c-fix" type="number" value="${C.fixDays}"><span>日</span></div></div>
       <div class="f"><label for="c-rd">稟議の遅れ警告</label><div class="suffix"><input class="inp" id="c-rd" type="number" value="${C.ringiDays}"><span>日</span></div></div></div></div>
-    <div class="panel"><h3>通知メール</h3><p>1行に1人：担当者名｜メールアドレス。毎朝、その人が担当する案件のうち「対応が必要」なものだけをメールで送ります。空欄の人には送りません。</p>${ta('c-mail', Object.entries((C.mail || {}).to || {}).map(([n, a]) => `${n}｜${a}`).join('\n'), 5)}
+    ${linePanel(C)}
+    <div class="panel"><h3>メール通知（予備）</h3><p>LINEの代わりにも、併用にも使えます。1行に1人：担当者名｜メールアドレス。毎朝、その人が担当する案件のうち「対応が必要」なものだけを送ります。空欄の人には送りません。</p>${ta('c-mail', Object.entries((C.mail || {}).to || {}).map(([n, a]) => `${n}｜${a}`).join('\n'), 5)}
       <p style="margin:10px 0 4px">まとめて受け取る宛先（1行に1つ）。全担当分の一覧が届きます。</p>${ta('c-mailcc', ((C.mail || {}).cc || []).join('\n'), 3)}
       <div class="fg"><div class="f"><label for="c-mailon">送信</label><select class="inp" id="c-mailon"><option value="on"${(C.mail || {}).enabled ? ' selected' : ''}>送る</option><option value="off"${(C.mail || {}).enabled ? '' : ' selected'}>送らない</option></select><small>止めるときは「送らない」。アドレスは残ります</small></div></div></div>
     <div class="panel"><h3>勤務説明書の定型文</h3><p>入社時必要品・保険・注意事項（1行に1つ）。</p>${ta('c-hitsuyo', C.fixed.hitsuyo, 3)}${ta('c-hoken', C.fixed.hoken, 4)}${ta('c-notes', C.fixed.notes.join('\n'), 6)}</div>
@@ -285,7 +330,9 @@ async function saveConfig() {
     staff: lines('c-staff'), media: lines('c-media'),
     approvers: lines('c-appr').map(split).map(([role, name = '']) => ({ role, name })),
     threshold: +$('#c-th').value || 65, fixDays: +$('#c-fix').value || 14, ringiDays: +$('#c-rd').value || 3,
-    /* 毎朝の通知メール。宛先はここに持ち、送信はSupabase側の定期実行が読む */
+    /* 毎朝の通知。送る・送らないだけをここに持ち、LINEの宛先は linefriends 側にある */
+    line: { enabled: $('#c-lineon').value === 'on' },
+    /* 予備のメール通知。宛先はここに持ち、送信はSupabase側の定期実行が読む */
     mail: {
       enabled: $('#c-mailon').value === 'on',
       to: Object.fromEntries(lines('c-mail').map(split).map(([n, a = '']) => [n, a]).filter(([n, a]) => n && a)),
@@ -293,7 +340,21 @@ async function saveConfig() {
     },
     fixed: { ...cfg().fixed, hitsuyo: $('#c-hitsuyo').value, hoken: $('#c-hoken').value, notes: lines('c-notes') },
   };
-  await Store.put('config', 'main', next); toast('設定を保存しました');
+  await Store.put('config', 'main', next);
+  await saveLineFriends();
+  toast('設定を保存しました');
+}
+/* LINEの宛先は1人1件の別データなので、画面で変えた人だけを書き戻す */
+async function saveLineFriends() {
+  const edited = {};
+  document.querySelectorAll('[data-lf]').forEach(el => {
+    (edited[el.dataset.lf] = edited[el.dataset.lf] || {})[el.dataset.lfk] = el.value;
+  });
+  for (const [userId, v] of Object.entries(edited)) {
+    const was = (S.linefriends || {})[userId];
+    if (!was || (was.role || 'off') === v.role && (was.tanto || '') === v.tanto) continue;
+    await Store.put('linefriends', userId, { ...was, role: v.role, tanto: v.tanto });
+  }
 }
 async function backup() {
   saveFile(`案件管理システム_バックアップ_${today()}.json`, JSON.stringify({ exportedAt: nowISO(), cases: S.cases, postings: S.postings, ads: S.ads, config: S.config, stats: S.stats }, null, 1), 'application/json');

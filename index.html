@@ -334,6 +334,20 @@ table.list tbody tr.click:hover td{background:var(--accent-soft)}
 .iresult.ok{color:var(--ok)} .iresult.warn{color:var(--warn)}
 .irow{gap:8px;flex-wrap:wrap}
 .irow .iact{flex:1;min-width:240px}
+/* 設定 → LINE通知の宛先一覧 */
+.panel.wide{grid-column:1/-1}
+.lfrow{display:grid;grid-template-columns:minmax(0,1fr) 190px 190px;gap:12px;align-items:center;padding:12px 0;border-bottom:1px solid var(--line-2)}
+.lfrow.gone{opacity:.5}
+.lfname{font-size:16px;font-weight:700;color:var(--ink)}
+.lftag{margin-left:8px;white-space:nowrap;font-size:12px;font-weight:700;color:#fff;background:var(--ink-3);border-radius:10px;padding:2px 9px}
+.lfempty{margin:4px 0 0;padding:16px 18px;border:2px dashed var(--line);border-radius:10px;font-size:15px;line-height:1.8;color:var(--ink-2)}
+.lfempty b{display:block;font-size:16px;color:var(--ink);margin-bottom:4px}
+.quota{margin-top:14px;padding:12px 16px;border-radius:10px;font-size:15px;line-height:1.7;border:2px solid}
+.quota b{font-size:17px}
+.quota.ok{border-color:var(--ok);background:color-mix(in srgb,var(--ok) 10%,var(--surface));color:var(--ink)}
+.quota.warn{border-color:var(--warn);background:color-mix(in srgb,var(--warn) 12%,var(--surface));color:var(--ink)}
+.quota.ng{border-color:var(--crit);background:color-mix(in srgb,var(--crit) 10%,var(--surface));color:var(--ink)}
+@media(max-width:760px){.lfrow{grid-template-columns:1fr;gap:6px}}
 .tabs .cnt.crit{background:var(--crit);color:#fff;border-color:var(--crit)}
 .hist{list-style:none;margin:0;padding:0;display:grid;gap:0}
 .hist li{padding:10px 0;border-bottom:1px solid var(--line-2);font-size:15px}
@@ -480,7 +494,7 @@ try { var t0 = localStorage.getItem('bring-theme') || 'light'; if (t0 === 'light
 /* 画面の更新が利用者に届くようにする仕組み
    ・JavaScriptは5分ごとに新しいものを取りにいく
    ・version.json の版番号がこのページより新しければ、自動で読み直す */
-const APP_VERSION = "202610141443";
+const APP_VERSION = "202610151028";
 (function () {
   var files = ["config.js","ref.js","core.js","caseview.js","docs.js","postings.js","ads.js","xlsxfill.js","main.js"];
   var q = "?v=" + Math.floor(Date.now() / 300000);

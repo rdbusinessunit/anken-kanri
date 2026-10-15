@@ -1,14 +1,18 @@
-/* 毎朝、担当者ごとに「対応が必要な案件」をメールで送る。
+/* 毎朝、担当者ごとに「対応が必要な案件」をLINEで送る。メールも併用できる。
  *
  * Supabase の定期実行（Supabase Cron）から呼ばれます。誰も画面を開いていなくても動きます。
  * 判定の中身は画面側の core.js の alertsFor() と同じです。片方だけ直すとズレるので、
  * 条件を変えるときは両方を直してください。
  *
+ * LINEの無料プランは月200通まで、1通＝1人宛てです。使い切ると送れなくなるので、
+ * 毎回フリープランの残りを確かめ、少なくなったら本文の先頭で知らせます。
+ * 宛先（LINEのuserId）は line-webhook 関数が集めて anken_docs の coll='linefriends' に入れます。
+ *
  * 必要なシークレット（Supabase の Edge Functions > Secrets に登録）
- *   SUPABASE_URL            … プロジェクトのURL（既定で入っています）
- *   SUPABASE_SERVICE_ROLE_KEY … 既定で入っています
- *   RESEND_API_KEY          … メール送信サービスのAPIキー
- *   MAIL_FROM               … 差出人（例: 案件管理システム <onboarding@resend.dev>）
+ *   LINE_TOKEN     … LINE Developers の「チャネルアクセストークン（長期）」
+ *   APP_URL        … システムのURL
+ *   RESEND_API_KEY … メールも併用する場合だけ
+ *   MAIL_FROM      … メールも併用する場合だけ
  */
 
 type Json = Record<string, unknown>;
@@ -30,9 +34,10 @@ function serviceKey(): string {
   return Deno.env.get("SUPABASE_ANON_KEY") ?? "";
 }
 const ENV_KEY = serviceKey();
+const LINE_TOKEN = Deno.env.get("LINE_TOKEN") ?? "";
 const RESEND_API_KEY = Deno.env.get("RESEND_API_KEY") ?? "";
 const MAIL_FROM = Deno.env.get("MAIL_FROM") ?? "";
-/* 画面のURL。メールから案件を直接開けるようにする */
+/* 画面のURL。通知から案件を直接開けるようにする */
 const APP_URL = Deno.env.get("APP_URL") ?? "https://rdbusinessunit.github.io/anken-kanri/";
 
 const JST = (d = new Date()) => new Date(d.getTime() + 9 * 3600 * 1000);
@@ -81,7 +86,7 @@ function alertsFor(c: any, postings: any[], ringiDays: number) {
       a.push({ tone: "crit", text: "③詳細が未入力のため、面接・進捗報告は停止中" });
     }
   }
-  /* 承認後の条件変更とRD未確認は、画面には出すがメールでは送らない（運用で決定） */
+  /* 承認後の条件変更とRD未確認は、画面には出すが通知では送らない（運用で決定） */
   const openIssues = (c.issues ?? []).filter((i: any) => i.state === "open").length;
   if (openIssues) a.push({ tone: "warn", text: `課題が${openIssues}件、未着手のままです` });
   for (const p of postings) {
@@ -98,10 +103,73 @@ const caseName = (c: any) =>
 const esc = (s: unknown) =>
   String(s ?? "").replace(/[&<>]/g, (m) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" }[m]!));
 
+type Hit = { c: any; alerts: { tone: string; text: string }[] };
+
+/* ============ LINE ============ */
+
+const TONE_MARK: Record<string, string> = { crit: "🔴", warn: "🟡", info: "🔵" };
+
+/* LINEの1通は5000文字まで。分けて送ると通数が増えて無料枠を食うので、
+   入りきらない分は件数だけ伝えて必ず1通に収める。 */
+function lineBody(rows: Hit[], title: string, notice: string) {
+  const LIMIT = 4500;
+  let out = `【案件管理】${title}\n${today()}　対応が必要な案件 ${rows.length}件\n`;
+  if (notice) out += `\n※ ${notice}\n`;
+  let shown = 0;
+  for (const { c, alerts } of rows) {
+    const who = [c.kyoten, c.tanto ? `担当 ${c.tanto}` : ""].filter(Boolean).join("／");
+    const block = `\n──────────\n▼ ${caseName(c)}\n${who}\n`
+      + alerts.map((a) => `${TONE_MARK[a.tone] ?? "・"} ${a.text}`).join("\n")
+      + `\n${APP_URL}#/case/${c.id}\n`;
+    if (out.length + block.length > LIMIT) break;
+    out += block;
+    shown++;
+  }
+  if (shown < rows.length) out += `\nほか ${rows.length - shown}件あります。\n${APP_URL}`;
+  return out;
+}
+
+/* 今月あと何通送れるか。取れなければ null（判断材料がないだけで、送信は止めない） */
+async function lineRemaining(): Promise<number | null> {
+  try {
+    const h = { Authorization: `Bearer ${LINE_TOKEN}` };
+    const [q, u] = await Promise.all([
+      fetch("https://api.line.me/v2/bot/message/quota", { headers: h }),
+      fetch("https://api.line.me/v2/bot/message/quota/consumption", { headers: h }),
+    ]);
+    if (!q.ok || !u.ok) return null;
+    const qj = await q.json();
+    if (qj?.type !== "limited") return null; /* 上限なしのプラン */
+    return Number(qj.value) - Number((await u.json()).totalUsage ?? 0);
+  } catch {
+    return null;
+  }
+}
+
+/* 1人に送る。失敗しても例外にせず理由を返す */
+async function linePush(to: string, text: string): Promise<string | null> {
+  try {
+    const res = await fetch("https://api.line.me/v2/bot/message/push", {
+      method: "POST",
+      headers: { Authorization: `Bearer ${LINE_TOKEN}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ to, messages: [{ type: "text", text }] }),
+    });
+    if (res.ok) return null;
+    const body = await res.text();
+    if (res.status === 429) return "今月の無料通数を使い切りました（LINE公式アカウントのプラン変更が必要）";
+    if (res.status === 403) return "この相手に送れません（友だち解除された可能性があります）";
+    return `${res.status} ${body.slice(0, 140)}`;
+  } catch (e) {
+    return String((e as Error).message ?? e);
+  }
+}
+
+/* ============ メール（併用する場合） ============ */
+
 const TONE_LABEL: Record<string, string> = { crit: "至急", warn: "注意", info: "お知らせ" };
 const TONE_BG: Record<string, string> = { crit: "#C0392B", warn: "#B8860B", info: "#50606B" };
 
-function body(rows: { c: any; alerts: { tone: string; text: string }[] }[], title: string) {
+function mailBody(rows: Hit[], title: string) {
   const items = rows.map(({ c, alerts }) => `
     <tr><td style="padding:14px 16px;border-bottom:1px solid #E2E7E4">
       <div style="font-size:17px;font-weight:700;color:#1D2B2A">${esc(caseName(c))}</div>
@@ -120,14 +188,14 @@ function body(rows: { c: any; alerts: { tone: string; text: string }[] }[], titl
       </div>
       <table style="width:100%;border-collapse:collapse">${items}</table>
       <div style="padding:14px 16px;font-size:12px;color:#5C6660">
-        送信を止めるときは、システムの「設定 → 通知メール」で「送らない」にしてください。
+        送信を止めるときは、システムの「設定 → 通知」で「送らない」にしてください。
       </div>
     </div></div>`;
 }
 
 /* 1件送る。失敗しても例外にせず理由を返す。
    1人の宛先が弾かれただけで、他の人に届かなくなるのを防ぐため。 */
-async function send(to: string, subject: string, html: string): Promise<string | null> {
+async function mailSend(to: string, subject: string, html: string): Promise<string | null> {
   try {
     const res = await fetch("https://api.resend.com/emails", {
       method: "POST",
@@ -144,60 +212,107 @@ async function send(to: string, subject: string, html: string): Promise<string |
   }
 }
 
+/* ============ 本体 ============ */
+
 Deno.serve(async (req) => {
   try {
     /* 呼び出し元が付けてきた鍵を使う。cronはservice key、手動テストはanon keyを付ける。
-       どちらも anken_docs を読める（setup.sql で anon に select を許可しているため）。 */
+       どちらも anken_docs を読める（テーブルのポリシーで anon に select を許可しているため）。 */
     const callerKey = (req.headers.get("Authorization") ?? "").replace(/^Bearer[ ]+/i, "").trim();
     const key = callerKey || ENV_KEY;
     /* ?debug=1 で、どの環境変数が来ているかだけ返す（値は出さない） */
     if (new URL(req.url).searchParams.get("debug")) {
-      const names = ["SUPABASE_URL", "SUPABASE_SERVICE_ROLE_KEY", "SUPABASE_SECRET_KEYS", "SUPABASE_ANON_KEY", "SUPABASE_PUBLISHABLE_KEYS", "RESEND_API_KEY", "MAIL_FROM", "APP_URL"];
+      const names = ["SUPABASE_URL", "SUPABASE_SERVICE_ROLE_KEY", "SUPABASE_SECRET_KEYS", "SUPABASE_ANON_KEY", "LINE_TOKEN", "RESEND_API_KEY", "MAIL_FROM", "APP_URL"];
       return Response.json({
         env: Object.fromEntries(names.map((n) => [n, (Deno.env.get(n) ?? "").length])),
         使う鍵: callerKey ? "呼び出し元のもの" : ENV_KEY ? "環境変数のもの" : "なし",
-        鍵の形: key ? key.slice(0, 7) + "…(" + key.length + "文字)" : "",
+        LINEの残り通数: await lineRemaining(),
       });
     }
     if (!key) {
       return Response.json({ ok: false, error: "データを読む鍵がありません" }, { status: 500 });
     }
-    if (!RESEND_API_KEY || !MAIL_FROM) {
-      return Response.json({ ok: false, error: "RESEND_API_KEY か MAIL_FROM が未設定です" }, { status: 400 });
-    }
-    const [cfgRows, caseRows, postRows] = await Promise.all([
+    const [cfgRows, caseRows, postRows, friendRows] = await Promise.all([
       loadColl("config", key), loadColl("cases", key), loadColl("postings", key),
+      loadColl("linefriends", key),
     ]);
     const cfg: any = (cfgRows.find((r: any) => r.id === "main") as any)?.data ?? {};
+    const line = cfg.line ?? {};
     const mail = cfg.mail ?? {};
-    if (!mail.enabled) return Response.json({ ok: true, skipped: "設定で「送らない」になっています" });
+    if (!line.enabled && !mail.enabled) {
+      return Response.json({ ok: true, skipped: "設定で「送らない」になっています" });
+    }
 
     const postings = postRows.map((r: any) => r.data);
     const ringiDays = Number(cfg.ringiDays) || 3;
-    const hits = caseRows
+    const hits: Hit[] = caseRows
       .map((r: any) => ({ c: r.data, alerts: alertsFor(r.data, postings, ringiDays) }))
       .filter((x) => x.alerts.length);
 
-    if (!hits.length) return Response.json({ ok: true, sent: 0, note: "対応が必要な案件はありません" });
+    if (!hits.length) return Response.json({ ok: true, 送った: 0, note: "対応が必要な案件はありません" });
 
     const sent: string[] = [];
     const failed: { to: string; reason: string }[] = [];
-    const one = async (addr: string, subject: string, html: string) => {
-      const err = await send(addr, subject, html);
-      if (err) failed.push({ to: addr, reason: err }); else sent.push(addr);
-    };
-    /* 担当者ごとに、その人の案件だけ送る */
-    for (const [name, addr] of Object.entries(mail.to ?? {})) {
-      const mine = hits.filter((x) => (x.c.tanto ?? "") === name);
-      if (!mine.length || !addr) continue;
-      await one(String(addr), `【案件管理】対応が必要な案件 ${mine.length}件`, body(mine, `${name} さんの案件`));
+    let remaining: number | null = null;
+
+    /* --- LINE --- */
+    if (line.enabled) {
+      if (!LINE_TOKEN) {
+        failed.push({ to: "LINE", reason: "LINE_TOKEN が未設定です" });
+      } else {
+        const friends = friendRows
+          .map((r: any) => r.data)
+          .filter((f: any) => f?.userId && f.active !== false && f.role && f.role !== "off");
+        remaining = await lineRemaining();
+        /* 残りが少なくなったら本文の先頭で知らせる。
+           警告だけを別に送ると、その1通も無料枠を食ってしまうため。 */
+        const notice = remaining !== null && remaining <= friends.length * 3
+          ? `LINEの無料通数の残りが ${remaining} 通です。少なくなっています`
+          : "";
+        for (const f of friends) {
+          const mine = f.role === "all" ? hits : hits.filter((x) => (x.c.tanto ?? "") === f.tanto);
+          if (!mine.length) continue;
+          const title = f.role === "all" ? "全担当のまとめ" : `${f.tanto} さんの案件`;
+          const err = await linePush(f.userId, lineBody(mine, title, notice));
+          const label = `LINE:${f.tanto || f.name || String(f.userId).slice(0, 8)}`;
+          if (err) failed.push({ to: label, reason: err });
+          else sent.push(label);
+        }
+      }
     }
-    /* まとめて受け取る宛先には全件 */
-    for (const addr of mail.cc ?? []) {
-      if (!addr) continue;
-      await one(String(addr), `【案件管理】対応が必要な案件 ${hits.length}件（全担当）`, body(hits, "全担当のまとめ"));
+
+    /* --- メール（併用する場合） --- */
+    if (mail.enabled) {
+      if (!RESEND_API_KEY || !MAIL_FROM) {
+        failed.push({ to: "メール", reason: "RESEND_API_KEY か MAIL_FROM が未設定です" });
+      } else {
+        const one = async (addr: string, subject: string, html: string) => {
+          const err = await mailSend(addr, subject, html);
+          if (err) failed.push({ to: addr, reason: err });
+          else sent.push(addr);
+        };
+        /* 担当者ごとに、その人の案件だけ送る */
+        for (const [name, addr] of Object.entries(mail.to ?? {})) {
+          const mine = hits.filter((x) => (x.c.tanto ?? "") === name);
+          if (!mine.length || !addr) continue;
+          await one(String(addr), `【案件管理】対応が必要な案件 ${mine.length}件`, mailBody(mine, `${name} さんの案件`));
+        }
+        /* まとめて受け取る宛先には全件 */
+        for (const addr of mail.cc ?? []) {
+          if (!addr) continue;
+          await one(String(addr), `【案件管理】対応が必要な案件 ${hits.length}件（全担当）`, mailBody(hits, "全担当のまとめ"));
+        }
+      }
     }
-    return Response.json({ ok: failed.length === 0, 送った: sent.length, 送れなかった: failed.length, 対象の案件: hits.length, 失敗の内訳: failed });
+
+    return Response.json({
+      ok: failed.length === 0,
+      送った: sent.length,
+      送れなかった: failed.length,
+      対象の案件: hits.length,
+      LINEの残り通数: remaining,
+      失敗の内訳: failed,
+    });
   } catch (e) {
     console.error(e);
     return Response.json({ ok: false, error: String((e as Error).message ?? e) }, { status: 500 });

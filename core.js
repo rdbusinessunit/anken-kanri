@@ -11,7 +11,8 @@ const DEFAULT_CONFIG = {
   media: ['Airワーク', '求人BOX', 'ジョブタウン', 'ヒバライト', 'ハローワーク', 'その他'],
   approvers: [{ role: '所長', name: '' }, { role: '管理本部', name: '' }, { role: '経理', name: '' }, { role: '決済', name: '' }],
   threshold: 65, fixDays: 14, ringiDays: 3,
-  /* 毎朝の通知メール。to は {担当者名: メールアドレス} */
+  /* 毎朝の通知。LINEが主、メールは予備。to は {担当者名: メールアドレス} */
+  line: { enabled: false },
   mail: { enabled: false, to: {}, cc: [] },
   fixed: {
     hitsuyo: '①免許証のコピー　②自動車の車検証のコピー　③給与振込予定の銀行通帳のコピー　④車の自賠責・任意保険証券のコピー　⑤マイナンバーのコピー（扶養者含む）　⑥雇用保険被保険者証のコピー　⑦扶養者がいる場合は、続柄が記載されている書類',
@@ -140,6 +141,8 @@ const norm = s => String(s || '').normalize('NFKC').replace(/株式会社|有限
 /* ===== 状態 ===== */
 const S = {
   cases: {}, postings: {}, ads: {}, config: clone(DEFAULT_CONFIG), stats: null,
+  /* LINE公式アカウントを友だち追加した人。line-webhook 関数が書き込む */
+  linefriends: {},
   me: lsGet('bring-me') || '',
   loaded: false, mode: 'init', error: '',
   draft: null, draftId: null, base: null, dirty: false, kept: {}, reason: '',
@@ -207,7 +210,7 @@ const Store = {
   async pull() {
     /* この画面が使う種類だけ読む。成績ボードが置く coll='board'(CSVの受け渡し用で
        1件1MB近くなる)まで毎回読むと、起動が重くなるため。 */
-    const MINE = new Set(['cases', 'postings', 'ads', 'config', 'stats']);
+    const MINE = new Set(['cases', 'postings', 'ads', 'config', 'stats', 'linefriends']);
     const list = (await this.listVersions()).filter(r => MINE.has(r.coll));
     const seen = new Set(); const need = {};
     list.forEach(r => { const k = r.coll + '/' + r.id; seen.add(k); if (this.ver[k] !== r.updated_at) (need[r.coll] = need[r.coll] || []).push(r.id); });
