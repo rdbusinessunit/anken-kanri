@@ -99,6 +99,22 @@ LINEの公式ドキュメントにも、一度選ぶと変更も解除もでき�
 | チャネルシークレット | 「チャネル基本設定」タブ |
 | チャネルアクセストークン（長期） | 「Messaging API設定」タブの一番下。「発行」を押すと出ます |
 
+## 関数の名前について（大事）
+
+Supabaseは関数を作るとき、ランダムな名前（スラッグ）を勝手に付けます。
+あとから表示名を変えても、**URLに使われる名前は変わりません。**
+設定画面にも「スラッグとエンドポイントURLは変更されません」と書かれています。
+
+そのため、このフォルダのファイル名とSupabase上のURLは一致していません。
+**URLの方が本物です。**
+
+| このフォルダ | Supabaseでの表示名 | 実際のURL（こちらが本物） |
+| --- | --- | --- |
+| `functions/daily-alert/` | daily-alert | `.../functions/v1/bright-processor` |
+| `functions/line-webhook/` | line-webhook | `.../functions/v1/hyper-action` |
+
+cronの設定やLINEのWebhook URLには、**右の列のURL**を使ってください。
+
 ## 3. 友だち追加を受け取る関数を置く
 
 Supabaseのダッシュボード → **Edge Functions** → **Deploy a new function**。
@@ -110,7 +126,8 @@ Supabaseのダッシュボード → **Edge Functions** → **Deploy a new funct
 LINEは鍵を付けずに呼んでくるので、検証をオンにすると弾かれてしまいます。
 代わりにLINEが付ける署名を毎回確かめているので、第三者が偽の登録を送り込むことはできません。
 
-配置できたら、関数のURLを控えます（`https://〇〇.supabase.co/functions/v1/line-webhook`）。
+配置できたら、関数のURLを控えます。表示名ではなく、画面の上に出ている実際のURL
+（`https://wmxsuggeudkxewjhczam.supabase.co/functions/v1/hyper-action`）です。
 
 ## 4. 通知を送る関数を置き直す
 
@@ -194,7 +211,7 @@ select cron.schedule(
   '0 23 * * *',  -- UTC 23:00 = 日本時間 翌朝8:00
   $$
   select net.http_post(
-    url     := '<プロジェクトURL>/functions/v1/daily-alert',
+    url     := '<プロジェクトURL>/functions/v1/bright-processor',
     headers := '{"Content-Type":"application/json","Authorization":"Bearer <service_role キー>"}'::jsonb
   );
   $$
