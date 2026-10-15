@@ -1,0 +1,7 @@
+{
+  "name": "anken-kanri-manual",
+  "private": true,
+  "description": "マニュアル（Word）を組み立てる道具。node build-manual.js で2冊できます。",
+  "scripts": { "build": "node build-manual.js" },
+  "dependencies": { "docx": "^9.5.1" }
+}

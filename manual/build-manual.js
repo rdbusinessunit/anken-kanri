@@ -9,15 +9,40 @@ const {
 } = require('docx');
 
 const SHOTS = path.join(__dirname, 'shots');
-const OUT = path.join(__dirname);
+/* 出力先。Wordで開いたままだと上書きできないので、別の場所に出せるようにしておく。
+   使い方:  node build-manual.js [出力先フォルダ] */
+const OUT = process.argv[2] || __dirname;
 
 const FONT = 'Meiryo';
+/* 絵文字はMeiryoに入っていないので、その部分だけフォントを分ける。
+   分けないとWordで白黒の□になり、色の説明が成り立たなくなる。 */
+const EFONT = 'Segoe UI Emoji';
 const NAVY = '1D3B36';
 const INK = '1D2B2A';
 const GRAY = '5C6660';
 const CRIT = 'B03028';
 const WARN = '9A6B06';
 const OKC = '1F7A52';
+
+/* 画面で使っている色。マニュアルの中でも同じ色を使う */
+const TONE = {
+  crit: { bg: 'C0392B', label: '至急' },
+  warn: { bg: 'B8860B', label: '注意' },
+  info: { bg: '50606B', label: 'お知らせ' },
+};
+
+const EMOJI = /([\u{1F300}-\u{1FAFF}\u{2190}-\u{21FF}\u{2460}-\u{24FF}\u{25A0}-\u{27BF}\u{2B00}-\u{2BFF}\u{FE0F}]+)/u;
+
+/* 絵文字のところだけ別フォントにして返す */
+function runs(text, o = {}) {
+  return String(text).split(EMOJI).filter(s => s !== '').map(part => new TextRun({
+    text: part,
+    font: EMOJI.test(part) ? EFONT : FONT,
+    size: o.size ?? 23,
+    bold: o.bold,
+    color: o.color ?? INK,
+  }));
+}
 
 /* A4・左右2cm → 本文の幅は約17cm。画像はこれに収まる大きさにする */
 const IMG_W = 620;
@@ -141,7 +166,7 @@ function mono(lines) {
         margins: { top: 160, bottom: 160, left: 220, right: 220 },
         children: lines.map(t => new Paragraph({
           spacing: { before: 0, after: 40, line: 300 },
-          children: [new TextRun({ text: t, font: FONT, size: 21, color: INK })],
+          children: runs(t, { size: 21 }),
         })),
       })],
     })],
@@ -157,7 +182,7 @@ function table(head, rows, widths) {
     margins: { top: 100, bottom: 100, left: 140, right: 140 },
     children: String(t).split('\n').map(line => new Paragraph({
       spacing: { before: 0, after: 0, line: 300 },
-      children: [new TextRun({ text: line, font: FONT, size: 21, bold: isHead, color: INK })],
+      children: runs(line, { size: 21, bold: isHead }),
     })),
   });
   return new Table({
@@ -174,6 +199,57 @@ function table(head, rows, widths) {
     rows: [
       new TableRow({ tableHeader: true, children: head.map((t, i) => cell(t, i, true)) }),
       ...rows.map(r => new TableRow({ children: r.map((t, i) => cell(t, i, false)) })),
+    ],
+  });
+}
+
+/* 色そのものを紙の上に出す表。「赤い」と書くより、赤い四角を見せた方が早い。
+   rows は [塗る色, 見本に入れる文字, 文字の色, 意味, 対応] の配列 */
+function colorTable(head, rows, widths) {
+  const total = widths.reduce((a, b) => a + b, 0);
+  const head1 = (t, i) => new TableCell({
+    width: { size: widths[i], type: WidthType.DXA },
+    shading: { type: ShadingType.CLEAR, fill: 'E8EDEA' },
+    margins: { top: 100, bottom: 100, left: 140, right: 140 },
+    children: [new Paragraph({ spacing: { before: 0, after: 0 }, children: runs(t, { size: 21, bold: true }) })],
+  });
+  return new Table({
+    width: { size: total, type: WidthType.DXA },
+    columnWidths: widths,
+    borders: {
+      top: { style: BorderStyle.SINGLE, size: 4, color: 'C9D2CE' },
+      bottom: { style: BorderStyle.SINGLE, size: 4, color: 'C9D2CE' },
+      left: { style: BorderStyle.SINGLE, size: 4, color: 'C9D2CE' },
+      right: { style: BorderStyle.SINGLE, size: 4, color: 'C9D2CE' },
+      insideHorizontal: { style: BorderStyle.SINGLE, size: 4, color: 'DCE3DF' },
+      insideVertical: { style: BorderStyle.SINGLE, size: 4, color: 'DCE3DF' },
+    },
+    rows: [
+      new TableRow({ tableHeader: true, children: head.map(head1) }),
+      ...rows.map(([fill, sample, fg, ...rest]) => new TableRow({
+        children: [
+          new TableCell({
+            width: { size: widths[0], type: WidthType.DXA },
+            shading: { type: ShadingType.CLEAR, fill },
+            margins: { top: 140, bottom: 140, left: 120, right: 120 },
+            verticalAlign: 'center',
+            children: [new Paragraph({
+              alignment: AlignmentType.CENTER, spacing: { before: 0, after: 0 },
+              children: runs(sample, { size: 22, bold: true, color: fg }),
+            })],
+          }),
+          ...rest.map((t, i) => new TableCell({
+            width: { size: widths[i + 1], type: WidthType.DXA },
+            shading: { type: ShadingType.CLEAR, fill: 'FFFFFF' },
+            margins: { top: 120, bottom: 120, left: 140, right: 140 },
+            verticalAlign: 'center',
+            children: String(t).split('\n').map(line => new Paragraph({
+              spacing: { before: 0, after: 0, line: 300 },
+              children: runs(line, { size: 21 }),
+            })),
+          })),
+        ],
+      })),
     ],
   });
 }
@@ -203,6 +279,28 @@ function bullets(items) {
 
 const BREAK = () => new Paragraph({ children: [new PageBreak()] });
 const GAP = (after = 160) => new Paragraph({ spacing: { after }, children: [] });
+
+/* 画面で使われている色の一覧。2冊とも同じものを載せる */
+function COLOR_LEGEND() {
+  return [
+    colorTable(
+      ['色', 'どこに出るか', '意味'],
+      [
+        ['B3261E', '赤', 'FFFFFF', '「面接・進捗報告：停止」\n未入力の欄の枠', '止まっています。すぐ手を打ってください'],
+        ['94600E', '黄土色', 'FFFFFF', '案件一覧のいちばん上の帯\n「上申から○日」', '遅れています。数日のうちに'],
+        ['2A7549', '緑', 'FFFFFF', '「入力ずみ」のバッジ\n進捗の丸', '終わっています。手は不要です'],
+        ['224C74', '紺', 'FFFFFF', '押せるボタン\nいま開いているタブ', 'ここを押してください'],
+        ['E8EDEA', '灰色', '5C6660', '押せないボタン\n「これから」の進捗', 'まだ押せません。横に理由が出ています'],
+      ],
+      [1500, 3600, 4538],
+    ),
+    GAP(200),
+    box('tip', '進捗の丸の色', [
+      '案件の画面の左にある「進捗」では、緑＝終わった、オレンジ＝いまここ、灰色＝これから、を表します。',
+      'オレンジの「いま ここ」を見れば、その案件が次に何をすべき状態なのかが分かります。',
+    ]),
+  ];
+}
 
 function cover(title, sub, who) {
   return [
@@ -353,14 +451,15 @@ function adminDoc() {
   ]));
   c.push(GAP(240));
   c.push(H2('印の意味'));
-  c.push(table(
-    ['印', '意味', '対応'],
+  c.push(P('メッセージの先頭に付く丸い印で、急ぎ具合が分かります。下の色が実際に届く色です。'));
+  c.push(colorTable(
+    ['LINEの印', '意味', 'いつまでに'],
     [
-      ['🔴', '至急。業務が止まっています', 'その日のうちに見てください'],
-      ['🟡', '注意。遅れが出ています', '数日のうちに見てください'],
-      ['🔵', 'お知らせ。もうすぐ期限です', '覚えておけば大丈夫です'],
+      [TONE.crit.bg, '🔴  赤', 'FFFFFF', '至急。業務が止まっています', 'その日のうちに見てください'],
+      [TONE.warn.bg, '🟡  黄', 'FFFFFF', '注意。遅れが出ています', '数日のうちに見てください'],
+      [TONE.info.bg, '🔵  青', 'FFFFFF', 'お知らせ。もうすぐ期限です', '覚えておけば大丈夫です'],
     ],
-    [1000, 4400, 4238],
+    [1700, 3900, 4038],
   ));
   c.push(GAP(240));
   c.push(box('tip', 'リンクを押すとその案件が開きます', [
@@ -416,6 +515,10 @@ function adminDoc() {
   ));
   c.push(GAP(240));
   c.push(P('上のボタンで拠点をしぼれます。「担当」「段階」や検索欄でも絞り込めます。'));
+
+  c.push(H2('画面の色のきまり'));
+  c.push(P('システムは色で状態を伝えます。文字を読まなくても、色だけで急ぎ具合が分かるようにしてあります。下の色が実際の画面の色です。'));
+  c.push(...COLOR_LEGEND());
   c.push(BREAK());
 
   c.push(H1('6. 設定を変える'));
@@ -529,6 +632,10 @@ function staffDoc() {
     '稟議が承認されても、③が未入力のままだと面接と進捗報告は止まったままです。',
     '承認されたらすぐ③を入力してください。',
   ]));
+
+  c.push(H2('画面の色のきまり'));
+  c.push(P('システムは色で状態を伝えます。文字を読まなくても、色だけで急ぎ具合が分かるようにしてあります。下の色が実際の画面の色です。'));
+  c.push(...COLOR_LEGEND());
   c.push(BREAK());
 
   c.push(H1('2. いちばん最初にすること'));
@@ -712,6 +819,16 @@ function staffDoc() {
   ]));
   c.push(GAP(200));
   c.push(P('URLを押すと、その案件がそのまま開きます。'));
+  c.push(H2('印の意味'));
+  c.push(colorTable(
+    ['LINEの印', '意味', 'いつまでに'],
+    [
+      [TONE.crit.bg, '🔴  赤', 'FFFFFF', '至急。業務が止まっています', 'その日のうちに'],
+      [TONE.warn.bg, '🟡  黄', 'FFFFFF', '注意。遅れが出ています', '数日のうちに'],
+      [TONE.info.bg, '🔵  青', 'FFFFFF', 'お知らせ。もうすぐ期限です', '覚えておけば大丈夫'],
+    ],
+    [1700, 3900, 4038],
+  ));
   c.push(BREAK());
 
   c.push(H1('13. 困ったとき'));
