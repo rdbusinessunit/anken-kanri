@@ -359,16 +359,28 @@ async function saveConfig() {
   await saveLineFriends();
   toast('設定を保存しました');
 }
-/* LINEの宛先は1人1件の別データなので、画面で変えた人だけを書き戻す */
+/* LINEの宛先は1人1件の別データ。プルダウンを動かしたその場で保存する。
+   「設定を保存」まで持ち越すと、20秒ごとの自動更新で選択が巻き戻ってしまうため。 */
+async function saveLineFriend(userId) {
+  const was = (S.linefriends || {})[userId];
+  if (!was) return;
+  const val = k => {
+    const el = document.querySelector(`[data-lf="${userId}"][data-lfk="${k}"]`);
+    return el ? el.value : '';
+  };
+  const role = val('role'), tanto = val('tanto');
+  if ((was.role || 'off') === role && (was.tanto || '') === tanto) return;
+  await Store.put('linefriends', userId, { ...was, role, tanto });
+  const who = tanto || was.name || 'この人';
+  toast(role === 'off' ? `${who} には送りません`
+    : role === 'all' ? `${who} に全担当のまとめを送ります`
+    : tanto ? `${tanto} さんの担当分を送ります`
+    : '担当者も選んでください');
+}
+/* 「設定を保存」でも念のため拾う（保存前に選び直した場合のため） */
 async function saveLineFriends() {
-  const edited = {};
-  document.querySelectorAll('[data-lf]').forEach(el => {
-    (edited[el.dataset.lf] = edited[el.dataset.lf] || {})[el.dataset.lfk] = el.value;
-  });
-  for (const [userId, v] of Object.entries(edited)) {
-    const was = (S.linefriends || {})[userId];
-    if (!was || (was.role || 'off') === v.role && (was.tanto || '') === v.tanto) continue;
-    await Store.put('linefriends', userId, { ...was, role: v.role, tanto: v.tanto });
+  for (const el of document.querySelectorAll('[data-lf][data-lfk="role"]')) {
+    await saveLineFriend(el.dataset.lf);
   }
 }
 async function backup() {

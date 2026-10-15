@@ -125,6 +125,9 @@ document.addEventListener('change', e => {
     S.me = v; lsSet('bring-me', v); rerender(); return;
   }
   if (t.dataset.filter && t.dataset.filter !== 'q') { S.filters[t.dataset.filter] = t.value; rerender(); return; }
+  /* LINE通知の宛先は、選んだその場で保存する。
+     画面は20秒ごとに作り直されるので、「設定を保存」まで持ち越すと選択が消えてしまう。 */
+  if (t.dataset.lf) { saveLineFriend(t.dataset.lf).catch(e => { console.error(e); toast('保存できませんでした', 'warn'); }); return; }
   if (t.id === 'adsin' && t.files.length) { loadAdFiles([...t.files]).catch(e => { console.error(e); impState().busy = ''; toast('読み込めませんでした', 'warn'); rerender(); }); return; }
   if (t.dataset.impk !== undefined) { const I = impState(); I.files[+t.dataset.impk].kyoten = t.value; I.v++; rerender(); return; }
   if (t.hasAttribute('data-p-adcodes') && S.draft) { S.draft.adCodes = t.value.split(/[\n,、\s]+/).map(codeNorm).filter(Boolean); markDirty(); refreshLive(); return; }
