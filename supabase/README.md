@@ -224,30 +224,42 @@ Supabase の Edge Functions の画面から `daily-alert` を手動で実行で�
 
 ## 10. 毎朝動かす
 
-SQL Editor で次を実行します。`<プロジェクトURL>` と `<service_role キー>` は
-Settings → API の値に置き換えてください。**毎朝8時（日本時間）**に動きます。
+ダッシュボードの **Integrations → Cron** から設定します。SQLは要りません。
 
-```sql
-select cron.schedule(
-  'anken-daily-alert',
-  '0 23 * * *',  -- UTC 23:00 = 日本時間 翌朝8:00
-  $$
-  select net.http_post(
-    url     := '<プロジェクトURL>/functions/v1/bright-processor',
-    headers := '{"Content-Type":"application/json","Authorization":"Bearer <service_role キー>"}'::jsonb
-  );
-  $$
-);
-```
+### 10-1. 拡張機能を2つ入れる
 
-**曜日はここに書きません。** 毎朝呼ばれますが、今日が送る日かどうかは関数の側が
-設定（送る曜日）を見て判断します。SQLに曜日を書くと、設定画面に出る通数の目安と
-ズレてしまうためです。曜日を変えたいときはシステムの設定画面で変えてください。
+はじめは拡張機能が入っていないので、先に入れます。どちらもデータは変わりません。
 
-時刻を変えるときは `23` の部分を直します（UTCなので日本時間マイナス9時間）。
-止めるときは `select cron.unschedule('anken-daily-alert');` です。
+1. Integrations → Cron → 右上の **Install integration**（`pg_cron` が入ります）
+2. **Jobs** タブ → **Create job** → Typeの下にある **Install pg_net extension**
 
-動いたかどうかは `select * from cron.job_run_details order by start_time desc limit 10;` で見られます。
+`pg_cron` が「決まった時刻に動かす」仕組み、`pg_net` が「外部に通信する」仕組みです。
+Edge Functionを呼ぶには両方必要で、`pg_net` がないと Type の選択肢がグレーのままです。
+
+### 10-2. ジョブを作る
+
+| 項目 | 値 |
+| --- | --- |
+| Name | `anken-daily-alert` |
+| Schedule | `0 23 * * *` |
+| Type | **Supabase Edge Function** |
+| Method | **POST** |
+| Edge Function | **bright-processor** |
+
+`0 23 * * *` は「毎日UTC23時」＝**日本時間の翌朝8時**です。Supabaseの時刻はUTCなので
+9時間引いた値を入れます。時刻を変えるときは `23` の部分を直します。
+
+Type で Edge Function を選ぶと、URLも認証も自動で入ります。鍵を貼る必要はありません。
+
+作れたら、一覧の **Next run** が日本時間 `(+0900)` の朝8時になっていることを確認してください。
+
+### 曜日はここに書きません
+
+毎朝呼ばれますが、今日が送る日かどうかは**関数の側が設定（送る曜日）を見て判断**します。
+cronに曜日を書くと、設定画面に出る通数の目安とズレてしまうためです。
+**曜日を変えたいときはシステムの設定画面だけ**で済みます。
+
+止めるときは、一覧の **Active** をオフにします。
 
 ---
 
