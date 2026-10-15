@@ -107,6 +107,18 @@ type Hit = { c: any; alerts: { tone: string; text: string }[] };
 
 /* ============ LINE ============ */
 
+/* 送る曜日。cronは毎日呼んでくるので、今日が送る日かどうかはここで決める。
+   SQLに曜日を書くと、設定画面に出る通数の目安とズレてしまうため。
+   postings.js の LINE_PLANS と同じ区分なので、増やすときは両方に足すこと。 */
+const LINE_PLANS: Record<string, { label: string; days: number[] }> = {
+  everyday: { label: "毎日", days: [0, 1, 2, 3, 4, 5, 6] },
+  weekday: { label: "平日（月〜金）", days: [1, 2, 3, 4, 5] },
+  mwf: { label: "月・水・金", days: [1, 3, 5] },
+};
+/* JST() は9時間ずらした Date なので、曜日は getUTCDay() で読む */
+const isSendDay = (plan: string) =>
+  (LINE_PLANS[plan] ?? LINE_PLANS.mwf).days.includes(JST().getUTCDay());
+
 const TONE_MARK: Record<string, string> = { crit: "🔴", warn: "🟡", info: "🔵" };
 
 /* LINEの1通は5000文字まで。分けて送ると通数が増えて無料枠を食うので、
@@ -256,7 +268,13 @@ Deno.serve(async (req) => {
     let remaining: number | null = null;
 
     /* --- LINE --- */
-    if (line.enabled) {
+    const plan = LINE_PLANS[line.days] ? String(line.days) : "mwf";
+    /* ?force=1 を付けると曜日を無視して送る。手で試すとき用 */
+    const force = !!new URL(req.url).searchParams.get("force");
+    let skippedToday = "";
+    if (line.enabled && !force && !isSendDay(plan)) {
+      skippedToday = `今日はLINEを送る日ではありません（設定：${LINE_PLANS[plan].label}）`;
+    } else if (line.enabled) {
       if (!LINE_TOKEN) {
         failed.push({ to: "LINE", reason: "LINE_TOKEN が未設定です" });
       } else {
@@ -311,6 +329,7 @@ Deno.serve(async (req) => {
       送れなかった: failed.length,
       対象の案件: hits.length,
       LINEの残り通数: remaining,
+      ...(skippedToday ? { LINE: skippedToday } : {}),
       失敗の内訳: failed,
     });
   } catch (e) {

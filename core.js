@@ -12,7 +12,8 @@ const DEFAULT_CONFIG = {
   approvers: [{ role: '所長', name: '' }, { role: '管理本部', name: '' }, { role: '経理', name: '' }, { role: '決済', name: '' }],
   threshold: 65, fixDays: 14, ringiDays: 3,
   /* 毎朝の通知。LINEが主、メールは予備。to は {担当者名: メールアドレス} */
-  line: { enabled: false },
+  /* days は 'everyday'（毎日）／'weekday'（平日）／'mwf'（月水金）。LINEは無料枠が月200通・1通＝1人宛てなので、送る曜日で受け取れる人数が変わる */
+  line: { enabled: false, days: 'mwf' },
   mail: { enabled: false, to: {}, cc: [] },
   fixed: {
     hitsuyo: '①免許証のコピー　②自動車の車検証のコピー　③給与振込予定の銀行通帳のコピー　④車の自賠責・任意保険証券のコピー　⑤マイナンバーのコピー（扶養者含む）　⑥雇用保険被保険者証のコピー　⑦扶養者がいる場合は、続柄が記載されている書類',

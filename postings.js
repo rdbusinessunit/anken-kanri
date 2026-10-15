@@ -218,15 +218,26 @@ ${JSON.stringify(caseBrief(c)).slice(0, 12000)}`;
 /* LINE通知の宛先。名前の一覧は line-webhook 関数が自動で作るので、
    ここでは「誰が・どの範囲を受け取るか」を選ぶだけでよい。
    LINEの無料プランは月200通・1通＝1人宛てなので、目安の通数も出しておく。 */
-const LINE_FREE = 200, LINE_DAYS = 22; /* 無料枠と、月あたりの配信日数（平日のみ） */
+const LINE_FREE = 200;
+/* 送る曜日と、その曜日が1か月に最大何日あるか。通数はこの日数で決まる。
+   曜日の判定は daily-alert 関数も同じ値でやっているので、増やすときは両方に足すこと。 */
+const LINE_PLANS = {
+  everyday: { label: '毎日', days: 31 },
+  weekday: { label: '平日（月〜金）', days: 23 },
+  mwf: { label: '月・水・金', days: 14 },
+};
 function linePanel(C) {
-  const on = (C.line || {}).enabled;
+  const L = C.line || {};
+  const on = L.enabled, plan = LINE_PLANS[L.days] ? L.days : 'mwf';
   const friends = Object.values(S.linefriends || {})
     .sort((a, b) => (b.active !== false) - (a.active !== false)
       || String(a.name || '').localeCompare(String(b.name || ''), 'ja'));
   const using = friends.filter(f => f.active !== false && f.role && f.role !== 'off').length;
-  const need = using * LINE_DAYS;
+  const need = using * LINE_PLANS[plan].days;
   const tone = need > LINE_FREE ? 'ng' : need > LINE_FREE * 0.9 ? 'warn' : 'ok';
+  /* 何人まで無料で入るか。「あと何人増やせるか」が知りたくなるので先に出しておく */
+  const caps = Object.entries(LINE_PLANS)
+    .map(([, p]) => `${p.label} ${Math.floor(LINE_FREE / p.days)}人`).join('／');
 
   const rows = friends.map(f => {
     const gone = f.active === false;
@@ -247,15 +258,19 @@ function linePanel(C) {
     並んだら、その人が誰なのかを選んでください。</div>`;
 
   return `<div class="panel wide"><h3>LINE通知</h3>
-    <p>毎朝8時に「対応が必要な案件」をLINEに送ります。<b>受け取る人は、会社のLINE公式アカウントを友だち追加してください。</b></p>
+    <p>朝8時に「対応が必要な案件」をLINEに送ります。<b>受け取る人は、会社のLINE公式アカウントを友だち追加してください。</b></p>
     <div class="fg"><div class="f"><label for="c-lineon">送信</label>
       <select class="inp" id="c-lineon"><option value="on"${on ? ' selected' : ''}>送る</option><option value="off"${on ? '' : ' selected'}>送らない</option></select>
-      <small>止めるときは「送らない」。宛先は残ります</small></div></div>
+      <small>止めるときは「送らない」。宛先は残ります</small></div>
+      <div class="f"><label for="c-linedays">送る曜日</label>
+      <select class="inp" id="c-linedays">${Object.entries(LINE_PLANS)
+        .map(([v, p]) => `<option value="${v}"${plan === v ? ' selected' : ''}>${p.label}</option>`).join('')}</select>
+      <small>無料で入る人数：${caps}</small></div></div>
     ${friends.length ? rows : empty}
-    <div class="quota ${tone}">受け取る人 <b>${using}人</b>　→　月あたり最大 <b>${need}通</b>（無料枠 ${LINE_FREE}通）
-      ${tone === 'ng' ? '<br>無料枠を超えます。人を減らすか、有料プラン（月5,000円）が必要です'
+    <div class="quota ${tone}">受け取る人 <b>${using}人</b> × ${LINE_PLANS[plan].label}（月${LINE_PLANS[plan].days}日まで）　→　月あたり最大 <b>${need}通</b>（無料枠 ${LINE_FREE}通）
+      ${tone === 'ng' ? `<br>無料枠を超えます。送る曜日を減らすか、人を減らしてください。それでも足りなければ有料プラン（月5,000円）が必要です`
         : tone === 'warn' ? '<br>ぎりぎりです。これ以上増やすと超えます'
-        : '<br>無料枠に収まります'}</div></div>`;
+        : `<br>無料枠に収まります。この曜日なら ${Math.floor(LINE_FREE / LINE_PLANS[plan].days)}人まで増やせます`}</div></div>`;
 }
 
 function viewSettings() {
@@ -331,7 +346,7 @@ async function saveConfig() {
     approvers: lines('c-appr').map(split).map(([role, name = '']) => ({ role, name })),
     threshold: +$('#c-th').value || 65, fixDays: +$('#c-fix').value || 14, ringiDays: +$('#c-rd').value || 3,
     /* 毎朝の通知。送る・送らないだけをここに持ち、LINEの宛先は linefriends 側にある */
-    line: { enabled: $('#c-lineon').value === 'on' },
+    line: { enabled: $('#c-lineon').value === 'on', days: $('#c-linedays').value },
     /* 予備のメール通知。宛先はここに持ち、送信はSupabase側の定期実行が読む */
     mail: {
       enabled: $('#c-mailon').value === 'on',
