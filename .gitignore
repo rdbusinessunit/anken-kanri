@@ -1,6 +1,1 @@
-# 取引先の連絡先・単価を含むデータ移行用SQLやバックアップは公開リポジトリに入れない
-migrate_data*.sql
-*バックアップ*.json
-*.xlsx
-*.csv
-!templates/*.xlsx
+node_modules/
