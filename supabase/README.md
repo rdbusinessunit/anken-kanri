@@ -147,12 +147,34 @@ Edge Functions → **Secrets** に追加します。
 メールも併用するなら、前からある `RESEND_API_KEY` と `MAIL_FROM` はそのまま残しておきます。
 使わないなら消してかまいません。
 
+### シークレットを足したら、必ず再デプロイ
+
+**Secrets に登録しただけでは関数に反映されません。** 関数は配置した時点の値を持ったまま動きます。
+鍵を足したり直したりしたら、Edge Functions → その関数 → Code → **Deploy updates** を
+もう一度押してください（コードを変えなくても押せます）。
+
+ちゃんと入ったかは、ブラウザで次を開けば分かります。**値は出ません。文字数だけ**です。
+
+```
+https://wmxsuggeudkxewjhczam.supabase.co/functions/v1/hyper-action?debug=1
+```
+
+```json
+{"LINE_CHANNEL_SECRET":"32文字","LINE_TOKEN":"172文字"}
+```
+
+`13文字` や `空です` になっていたら、別のものをコピーしています。
+チャネルID（10文字）やベーシックID（9文字）と間違えやすいので注意してください。
+
 ## 6. LINEに窓口のURLを教える
 
 LINE Developers → 作ったチャネル → **Messaging API設定** → **Webhook URL**。
 手順3で控えたURLを貼って、**「Webhookの利用」をオン**にします。
 
 「検証」ボタンを押して **成功** と出れば、つながっています。
+
+401が出たときは、Supabaseの「Verify JWT」がオンに戻っているか、
+`LINE_CHANNEL_SECRET` が違うかのどちらかです。上の `?debug=1` で切り分けられます。
 
 ここで LINE Official Account Manager の **設定 → 応答設定** に戻り、
 手順1-3で押せなかった **Webhook がオンになっている**ことを確認してください。

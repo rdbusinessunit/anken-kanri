@@ -108,6 +108,15 @@ const HELLO = `友だち追加ありがとうございます。
 「対応が必要な案件」が届くようになります。`;
 
 Deno.serve(async (req) => {
+  /* ?debug=1 で、鍵が入っているかだけ返す。値そのものは出さない。
+     LINEの「検証」が401になるとき、鍵が空なのか間違っているのかを切り分けるため。 */
+  if (new URL(req.url).searchParams.get("debug")) {
+    return Response.json({
+      LINE_CHANNEL_SECRET: CHANNEL_SECRET ? `${CHANNEL_SECRET.length}文字` : "空です",
+      LINE_TOKEN: LINE_TOKEN ? `${LINE_TOKEN.length}文字` : "空です",
+      備考: "チャネルシークレットは32文字、アクセストークンは150文字以上が正常です",
+    });
+  }
   if (req.method !== "POST") return new Response("ok");
   const raw = await req.text();
   if (!await signatureOk(raw, req.headers.get("x-line-signature") ?? "")) {
