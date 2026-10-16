@@ -1,0 +1,65 @@
+# 毎朝、対応が必要な案件をLINEで送る。
+#
+# Supabase Cron（pg_net）でも同じことはできますが、待ち時間が最大5秒までで、
+# 関数が起動しきる前に打ち切られて1通も送られないことがありました。
+# こちらは待ち時間に余裕があり、実行の記録もGitHubの画面で見られます。
+#
+# 何曜日に送るかは、ここではなくシステムの「設定 → LINE通知 → 送る曜日」で決めます。
+# 毎朝呼びますが、送る日でなければ関数の側が何もせずに終わります。
+
+name: 毎朝の通知
+
+on:
+  schedule:
+    # UTCの23:00 = 日本時間の翌朝8:00。GitHubの都合で数分～十数分ずれることがあります。
+    - cron: '0 23 * * *'
+  # 画面の「Run workflow」からいつでも手で動かせます
+  workflow_dispatch:
+    inputs:
+      force:
+        description: '曜日を無視して送る（テスト用）'
+        type: boolean
+        default: false
+
+# 二重に動かない
+concurrency:
+  group: daily-alert
+  cancel-in-progress: false
+
+jobs:
+  notify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: 通知を送る
+        run: |
+          set -u
+          # 画面側の config.js と同じ公開キー。公開されて問題ない種類の鍵で、
+          # 読み書きの制限はテーブル側のポリシーで管理しています。
+          KEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6IndteHN1Z2dldWRreGV3amhjemFtIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODc2MzYyNTEsImV4cCI6MjEwMzIxMjI1MX0.8c0uRXyDZ_vB04vQTQKynTcEGRNnXPmTgBsWcEYpPWw'
+          URL='https://wmxsuggeudkxewjhczam.supabase.co/functions/v1/bright-processor'
+          if [ "${{ inputs.force }}" = "true" ]; then URL="$URL?force=1"; fi
+
+          echo "呼び出し先: $URL"
+          CODE=$(curl -sS -X POST "$URL" \
+            -H "Authorization: Bearer $KEY" \
+            -H "Content-Type: application/json" \
+            --max-time 300 --retry 2 --retry-delay 10 --retry-connrefused \
+            -o response.json -w '%{http_code}') || CODE=000
+
+          echo "HTTPの応答: $CODE"
+          echo '--- 関数が返した内容 ---'
+          cat response.json || true
+          echo
+
+          if [ "$CODE" != "200" ]; then
+            echo "::error::関数を呼べませんでした（HTTP $CODE）"
+            exit 1
+          fi
+          if ! grep -q '"ok":true' response.json; then
+            echo "::error::通知の送信に失敗しました。上の内容を見てください"
+            exit 1
+          fi
+
+          # 画面の「設定 → LINE通知 → 前回の送信」にも同じ結果が出ます
+          echo "::notice::$(cat response.json)"
