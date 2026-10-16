@@ -347,6 +347,12 @@ table.list tbody tr.click:hover td{background:var(--accent-soft)}
 .quota.ok{border-color:var(--ok);background:color-mix(in srgb,var(--ok) 10%,var(--surface));color:var(--ink)}
 .quota.warn{border-color:var(--warn);background:color-mix(in srgb,var(--warn) 12%,var(--surface));color:var(--ink)}
 .quota.ng{border-color:var(--crit);background:color-mix(in srgb,var(--crit) 10%,var(--surface));color:var(--ink)}
+.lastrun{margin-top:14px;padding:11px 15px;border-radius:9px;border-left:6px solid var(--line);background:var(--surface-2,#F3F6F4);display:grid;gap:3px}
+.lastrun b{font-size:15px;color:var(--ink)}
+.lastrun span{font-size:14px;color:var(--ink-2)}
+.lastrun.ok{border-left-color:var(--ok)}
+.lastrun.ng{border-left-color:var(--crit)}
+.lastrun.ng b{color:var(--crit)}
 @media(max-width:760px){.lfrow{grid-template-columns:1fr;gap:6px}}
 .tabs .cnt.crit{background:var(--crit);color:#fff;border-color:var(--crit)}
 .hist{list-style:none;margin:0;padding:0;display:grid;gap:0}
@@ -494,7 +500,7 @@ try { var t0 = localStorage.getItem('bring-theme') || 'light'; if (t0 === 'light
 /* 画面の更新が利用者に届くようにする仕組み
    ・JavaScriptは5分ごとに新しいものを取りにいく
    ・version.json の版番号がこのページより新しければ、自動で読み直す */
-const APP_VERSION = "202610151416";
+const APP_VERSION = "202610161420";
 (function () {
   var files = ["config.js","ref.js","core.js","caseview.js","docs.js","postings.js","ads.js","xlsxfill.js","main.js"];
   var q = "?v=" + Math.floor(Date.now() / 300000);

@@ -144,6 +144,8 @@ const S = {
   cases: {}, postings: {}, ads: {}, config: clone(DEFAULT_CONFIG), stats: null,
   /* LINE公式アカウントを友だち追加した人。line-webhook 関数が書き込む */
   linefriends: {},
+  /* 毎朝の通知の結果。daily-alert 関数が1件だけ書き込む */
+  notifylog: {},
   me: lsGet('bring-me') || '',
   loaded: false, mode: 'init', error: '',
   draft: null, draftId: null, base: null, dirty: false, kept: {}, reason: '',
@@ -211,7 +213,7 @@ const Store = {
   async pull() {
     /* この画面が使う種類だけ読む。成績ボードが置く coll='board'(CSVの受け渡し用で
        1件1MB近くなる)まで毎回読むと、起動が重くなるため。 */
-    const MINE = new Set(['cases', 'postings', 'ads', 'config', 'stats', 'linefriends']);
+    const MINE = new Set(['cases', 'postings', 'ads', 'config', 'stats', 'linefriends', 'notifylog']);
     const list = (await this.listVersions()).filter(r => MINE.has(r.coll));
     const seen = new Set(); const need = {};
     list.forEach(r => { const k = r.coll + '/' + r.id; seen.add(k); if (this.ver[k] !== r.updated_at) (need[r.coll] = need[r.coll] || []).push(r.id); });

@@ -226,6 +226,22 @@ const LINE_PLANS = {
   weekday: { label: '平日（月〜金）', days: 23 },
   mwf: { label: '月・水・金', days: 14 },
 };
+/* 前回の送信結果。毎朝の通知はcronから呼ばれ、返事を待たない作りなので、
+   うまくいったかどうかはここでしか分からない。 */
+function lastRunHTML() {
+  const r = (S.notifylog || {}).last;
+  if (!r) return '<div class="lastrun">まだ一度も送信されていません。</div>';
+  const when = fmtDT(r.at);
+  if (r.ok === false) {
+    const why = r.error || (r['失敗の内訳'] || []).map(x => `${x.to}：${x.reason}`).join(' / ') || '原因不明';
+    return `<div class="lastrun ng"><b>前回の送信：${esc(when)}　失敗しました</b><span>${esc(why)}</span></div>`;
+  }
+  const n = r['送った'] || 0;
+  const note = r['結果'] ? `　（${esc(r['結果'])}）` : '';
+  return `<div class="lastrun ok"><b>前回の送信：${esc(when)}</b><span>${n}人に送信${note}　対象の案件 ${r['対象の案件'] ?? 0}件${
+    r['LINEの残り通数'] != null ? `　残り ${r['LINEの残り通数']}通` : ''}</span></div>`;
+}
+
 function linePanel(C) {
   const L = C.line || {};
   const on = L.enabled, plan = LINE_PLANS[L.days] ? L.days : 'mwf';
@@ -267,6 +283,7 @@ function linePanel(C) {
         .map(([v, p]) => `<option value="${v}"${plan === v ? ' selected' : ''}>${p.label}</option>`).join('')}</select>
       <small>無料で入る人数：${caps}</small></div></div>
     ${friends.length ? rows : empty}
+    ${lastRunHTML()}
     <div class="quota ${tone}">受け取る人 <b>${using}人</b> × ${LINE_PLANS[plan].label}（月${LINE_PLANS[plan].days}日まで）　→　月あたり最大 <b>${need}通</b>（無料枠 ${LINE_FREE}通）
       ${tone === 'ng' ? `<br>無料枠を超えます。送る曜日を減らすか、人を減らしてください。それでも足りなければ有料プラン（月5,000円）が必要です`
         : tone === 'warn' ? '<br>ぎりぎりです。これ以上増やすと超えます'

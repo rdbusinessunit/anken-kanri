@@ -1,5 +1,10 @@
 /* 毎朝、担当者ごとに「対応が必要な案件」をLINEで送る。メールも併用できる。
  *
+ * cron（pg_net）から呼ばれたときは、すぐ200を返して送信は裏で続けます。
+ * pg_netの待ち時間は画面から最大5秒までしか延ばせず、この関数はそれを
+ * 超えることがあるためです。打ち切られると1通も送られません。
+ * 結果は anken_docs の coll=notifylog に1件だけ残します。
+ *
  * Supabase の定期実行（Supabase Cron）から呼ばれます。誰も画面を開いていなくても動きます。
  * 判定の中身は画面側の core.js の alertsFor() と同じです。片方だけ直すとズレるので、
  * 条件を変えるときは両方を直してください。
@@ -215,18 +220,35 @@ async function mailSend(to: string, subject: string, html: string): Promise<stri
   }
 }
 
+/* 毎回の結果を1件だけ残す。設定画面の「前回の送信」に出す。
+   cronから呼ぶときは返事を待たない作りなので、これが唯一の記録になる。 */
+async function writeLog(result: Record<string, unknown>) {
+  try {
+    await fetch(`${SB_URL}/rest/v1/anken_docs?on_conflict=coll,id`, {
+      method: "POST",
+      headers: {
+        apikey: SB_KEY,
+        Authorization: `Bearer ${SB_KEY}`,
+        "Content-Type": "application/json",
+        Prefer: "resolution=merge-duplicates",
+      },
+      body: JSON.stringify([{
+        coll: "notifylog",
+        id: "last",
+        data: { ...result, at: new Date().toISOString() },
+        updated_at: new Date().toISOString(),
+        updated_by: "通知",
+      }]),
+    });
+  } catch (e) {
+    console.error("記録に失敗", e);
+  }
+}
+
 /* ============ 本体 ============ */
 
-Deno.serve(async (req) => {
+async function run(force: boolean): Promise<Record<string, unknown>> {
   try {
-    /* ?debug=1 で、鍵が入っているかだけ返す（値は出さない）。送信はしない */
-    if (new URL(req.url).searchParams.get("debug")) {
-      const names = ["LINE_TOKEN", "RESEND_API_KEY", "MAIL_FROM", "APP_URL"];
-      return Response.json({
-        env: Object.fromEntries(names.map((n) => [n, (Deno.env.get(n) ?? "").length ? `${(Deno.env.get(n) ?? "").length}文字` : "空です"])),
-        LINEの残り通数: await lineRemaining(),
-      });
-    }
     const [cfgRows, caseRows, postRows, friendRows] = await Promise.all([
       loadColl("config"), loadColl("cases"), loadColl("postings"), loadColl("linefriends"),
     ]);
@@ -234,7 +256,7 @@ Deno.serve(async (req) => {
     const line = cfg.line ?? {};
     const mail = cfg.mail ?? {};
     if (!line.enabled && !mail.enabled) {
-      return Response.json({ ok: true, skipped: "設定で「送らない」になっています" });
+      return { ok: true, 送った: 0, 結果: "設定で「送らない」になっています" };
     }
 
     const postings = postRows.map((r: any) => r.data);
@@ -243,7 +265,7 @@ Deno.serve(async (req) => {
       .map((r: any) => ({ c: r.data, alerts: alertsFor(r.data, postings, ringiDays) }))
       .filter((x) => x.alerts.length);
 
-    if (!hits.length) return Response.json({ ok: true, 送った: 0, note: "対応が必要な案件はありません" });
+    if (!hits.length) return { ok: true, 送った: 0, 結果: "対応が必要な案件はありません" };
 
     const sent: string[] = [];
     const failed: { to: string; reason: string }[] = [];
@@ -251,8 +273,6 @@ Deno.serve(async (req) => {
 
     /* --- LINE --- */
     const plan = LINE_PLANS[line.days] ? String(line.days) : "mwf";
-    /* ?force=1 を付けると曜日を無視して送る。手で試すとき用 */
-    const force = !!new URL(req.url).searchParams.get("force");
     let skippedToday = "";
     if (line.enabled && !force && !isSendDay(plan)) {
       skippedToday = `今日はLINEを送る日ではありません（設定：${LINE_PLANS[plan].label}）`;
@@ -305,17 +325,53 @@ Deno.serve(async (req) => {
       }
     }
 
-    return Response.json({
+    return {
       ok: failed.length === 0,
       送った: sent.length,
       送れなかった: failed.length,
       対象の案件: hits.length,
       LINEの残り通数: remaining,
-      ...(skippedToday ? { LINE: skippedToday } : {}),
+      ...(skippedToday ? { 結果: skippedToday } : {}),
       失敗の内訳: failed,
-    });
+    };
   } catch (e) {
     console.error(e);
-    return Response.json({ ok: false, error: String((e as Error).message ?? e) }, { status: 500 });
+    return { ok: false, 送った: 0, error: String((e as Error).message ?? e) };
   }
+}
+
+Deno.serve(async (req) => {
+  const url = new URL(req.url);
+
+  /* ?debug=1 で、鍵が入っているかだけ返す（値は出さない）。送信はしない */
+  if (url.searchParams.get("debug")) {
+    const names = ["LINE_TOKEN", "RESEND_API_KEY", "MAIL_FROM", "APP_URL"];
+    return Response.json({
+      env: Object.fromEntries(names.map((n) => [n, (Deno.env.get(n) ?? "").length ? `${(Deno.env.get(n) ?? "").length}文字` : "空です"])),
+      LINEの残り通数: await lineRemaining(),
+    });
+  }
+
+  /* ?force=1 を付けると曜日を無視して送る。手で試すとき用 */
+  const force = !!url.searchParams.get("force");
+
+  /* cron（pg_net）から呼ばれたときは、すぐ返事を返して送信は裏で続ける。
+     pg_netの待ち時間は画面から最大5秒までしか延ばせず、この関数は
+     起動＋4種類の読み込み＋LINE送信で、それを超えることがあるため。
+     打ち切られると1通も送られないので、先に200を返してしまう。
+     結果は anken_docs の notifylog に残り、設定画面の「前回の送信」に出る。 */
+  const body = await req.text().catch(() => "");
+  const fromCron = /pg_net/i.test(req.headers.get("user-agent") ?? "")
+    || !!url.searchParams.get("async")
+    || /"async"\s*:\s*true/.test(body);
+
+  const job = run(force).then(async (r) => { await writeLog(r); return r; });
+
+  if (fromCron) {
+    (globalThis as { EdgeRuntime?: { waitUntil(p: Promise<unknown>): void } })
+      .EdgeRuntime?.waitUntil?.(job);
+    job.then((r) => console.log("通知の結果", r)).catch((e) => console.error(e));
+    return Response.json({ ok: true, 受付: "送信を始めました。結果は設定画面の「前回の送信」に出ます" });
+  }
+  return Response.json(await job);
 });
