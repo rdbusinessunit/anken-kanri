@@ -247,11 +247,26 @@ async function writeLog(result: Record<string, unknown>) {
 
 /* ============ 本体 ============ */
 
-async function run(force: boolean): Promise<Record<string, unknown>> {
+async function run(force: boolean, once: boolean): Promise<Record<string, unknown>> {
   try {
-    const [cfgRows, caseRows, postRows, friendRows] = await Promise.all([
+    const [cfgRows, caseRows, postRows, friendRows, logRows] = await Promise.all([
       loadColl("config"), loadColl("cases"), loadColl("postings"), loadColl("linefriends"),
+      loadColl("notifylog"),
     ]);
+
+    /* 1日1回だけにする。GitHubの定期実行は1〜2時間遅れることがあるので、
+       朝の時間帯に何回か呼んで、最初に通ったものだけを生かす。
+       記録は上書きしない（朝の本当の結果を消さないため）。 */
+    if (once && !force) {
+      const last = (logRows.find((r: any) => r.id === "last") as any)?.data;
+      if (last?.ok && last.at) {
+        const lastDay = new Date(new Date(String(last.at)).getTime() + 9 * 3600 * 1000)
+          .toISOString().slice(0, 10);
+        if (lastDay === today()) {
+          return { ok: true, 送った: 0, 結果: "今日はすでに実行済みです", 記録しない: true };
+        }
+      }
+    }
     const cfg: any = (cfgRows.find((r: any) => r.id === "main") as any)?.data ?? {};
     const line = cfg.line ?? {};
     const mail = cfg.mail ?? {};
@@ -354,6 +369,8 @@ Deno.serve(async (req) => {
 
   /* ?force=1 を付けると曜日を無視して送る。手で試すとき用 */
   const force = !!url.searchParams.get("force");
+  /* ?once=1 を付けると、その日すでに実行済みなら何もしない。定期実行から使う */
+  const once = !!url.searchParams.get("once");
 
   /* cron（pg_net）から呼ばれたときは、すぐ返事を返して送信は裏で続ける。
      pg_netの待ち時間は画面から最大5秒までしか延ばせず、この関数は
@@ -365,7 +382,11 @@ Deno.serve(async (req) => {
     || !!url.searchParams.get("async")
     || /"async"\s*:\s*true/.test(body);
 
-  const job = run(force).then(async (r) => { await writeLog(r); return r; });
+  const job = run(force, once).then(async (r) => {
+    /* 「今日はすでに実行済み」のときは記録を上書きしない。朝の結果を残すため */
+    if (!r.記録しない) await writeLog(r);
+    return r;
+  });
 
   if (fromCron) {
     (globalThis as { EdgeRuntime?: { waitUntil(p: Promise<unknown>): void } })
