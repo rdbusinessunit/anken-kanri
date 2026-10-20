@@ -698,9 +698,18 @@ function JobAdDashboard() {
   async function saveFeeds(list) {
     const stamp = { importedAt: new Date().toISOString() };
     const puts = [];
+    /* 渡し場は拠点ごとに1件なので、同じ拠点に複数のアカウントがあるときは行をまとめる。
+       上書きすると、先に処理したファイルが丸ごと消えてしまうため。 */
+    const byBranch = {};
     list.filter((p) => p.kind === "airwork").forEach((p) => {
-      puts.push(["feed-indeed-" + p.branch, { ...stamp, type: "Indeed", kyoten: p.branch, account: p.account,
-        source: p.name, period: p.period, rows: pickCols(p.rows, FEED_COLS.indeed) }]);
+      const b = byBranch[p.branch] || (byBranch[p.branch] = { names: [], accounts: [], period: p.period, rows: [] });
+      b.names.push(p.name);
+      if (p.account) b.accounts.push(p.account);
+      b.rows.push(...pickCols(p.rows, FEED_COLS.indeed));
+    });
+    Object.entries(byBranch).forEach(([branch, b]) => {
+      puts.push(["feed-indeed-" + branch, { ...stamp, type: "Indeed", kyoten: branch,
+        account: b.accounts.join("＋"), source: b.names.join(" ＋ "), period: b.period, rows: b.rows }]);
     });
     const kbr = list.filter((p) => p.kind === "kyujinbox");
     if (kbr.length) {
