@@ -36,6 +36,12 @@ const MAIL_FROM = Deno.env.get("MAIL_FROM") ?? "";
 /* 画面のURL。通知から案件を直接開けるようにする */
 const APP_URL = Deno.env.get("APP_URL") ?? "https://rdbusinessunit.github.io/anken-kanri/";
 
+/* この時刻より前には送りません（日本時間）。早朝にLINEが鳴るのを防ぐためです。
+   定期実行を早い時間から並べてあるのは、GitHubの遅れを吸収するためで、
+   早く動いたぶんはここで止めます。 */
+const SEND_FROM_MIN = 7 * 60 + 30;
+const SEND_FROM_LABEL = "7時半";
+
 const JST = (d = new Date()) => new Date(d.getTime() + 9 * 3600 * 1000);
 const today = () => JST().toISOString().slice(0, 10);
 const dateOf = (s: unknown) => (s ? new Date(String(s)) : null);
@@ -254,9 +260,14 @@ async function run(force: boolean, once: boolean): Promise<Record<string, unknow
       loadColl("notifylog"),
     ]);
 
-    /* 1日1回だけにする。GitHubの定期実行は1〜2時間遅れることがあるので、
-       朝の時間帯に何回か呼んで、最初に通ったものだけを生かす。
-       記録は上書きしない（朝の本当の結果を消さないため）。 */
+    /* 定期実行のときだけの2つの門番。どちらも記録を書かずに帰る（その日の枠を使わない）。
+
+       GitHubの定期実行は混み具合で1〜3時間遅れます（実測 1:39 / 2:04 / 2:59）。
+       そこで早朝から何回も呼んでおき、
+         ・まだ早い時間に動いたぶんは、何もせず帰る
+         ・7時半を過ぎてから動いた最初のぶんが送る
+         ・その日すでに送っていれば、何もせず帰る
+       という形にしています。遅れても遅れなくても7時半〜8時半ごろに届きます。 */
     if (once && !force) {
       const last = (logRows.find((r: any) => r.id === "last") as any)?.data;
       if (last?.ok && last.at) {
@@ -265,6 +276,11 @@ async function run(force: boolean, once: boolean): Promise<Record<string, unknow
         if (lastDay === today()) {
           return { ok: true, 送った: 0, 結果: "今日はすでに実行済みです", 記録しない: true };
         }
+      }
+      const n = JST();
+      const nowMin = n.getUTCHours() * 60 + n.getUTCMinutes();
+      if (nowMin < SEND_FROM_MIN) {
+        return { ok: true, 送った: 0, 結果: `まだ早いので送りません（${SEND_FROM_LABEL}以降に送ります）`, 記録しない: true };
       }
     }
     const cfg: any = (cfgRows.find((r: any) => r.id === "main") as any)?.data ?? {};

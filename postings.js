@@ -274,7 +274,7 @@ function linePanel(C) {
     並んだら、その人が誰なのかを選んでください。</div>`;
 
   return `<div class="panel wide"><h3>LINE通知</h3>
-    <p>朝8時に「対応が必要な案件」をLINEに送ります。<b>受け取る人は、会社のLINE公式アカウントを友だち追加してください。</b></p>
+    <p>朝7時半〜8時半ごろに「対応が必要な案件」をLINEに送ります。<b>受け取る人は、会社のLINE公式アカウントを友だち追加してください。</b></p>
     <div class="fg"><div class="f"><label for="c-lineon">送信</label>
       <select class="inp" id="c-lineon"><option value="on"${on ? ' selected' : ''}>送る</option><option value="off"${on ? '' : ' selected'}>送らない</option></select>
       <small>止めるときは「送らない」。宛先は残ります</small></div>
