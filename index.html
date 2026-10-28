@@ -362,6 +362,12 @@ table.list tbody tr.click:hover td{background:var(--accent-soft)}
 .aim b{font-size:16px;color:var(--ink)}
 .aim span{font-size:13.5px;color:var(--ink-3);line-height:1.6}
 .aim.on b{color:var(--accent)}
+.awf{border:2px solid var(--line);border-radius:10px;padding:12px 14px;margin:0 0 12px;background:var(--surface)}
+.awf.over{border-color:var(--crit);background:color-mix(in srgb,var(--crit) 6%,var(--surface))}
+.awf b{font-size:15.5px;color:var(--ink)}
+.awf .ngc{color:var(--crit);font-weight:700}
+.awf textarea{width:100%;margin-top:8px;padding:9px 11px;border:1px solid var(--line);border-radius:8px;
+  background:var(--surface);font-size:15px;line-height:1.8;color:var(--ink)}
 pre.prompt{margin:10px 0 0;padding:14px 16px;background:var(--surface-2,#F3F6F4);border:1px solid var(--line);border-radius:9px;
   font-family:'Consolas','Courier New',monospace;font-size:13px;line-height:1.75;color:var(--ink);
   white-space:pre-wrap;word-break:break-word;max-height:460px;overflow:auto}
@@ -514,7 +520,7 @@ try { var t0 = localStorage.getItem('bring-theme') || 'light'; if (t0 === 'light
 /* 画面の更新が利用者に届くようにする仕組み
    ・JavaScriptは5分ごとに新しいものを取りにいく
    ・version.json の版番号がこのページより新しければ、自動で読み直す */
-const APP_VERSION = "202610281028";
+const APP_VERSION = "202610281043";
 (function () {
   var files = ["config.js","ref.js","core.js","caseview.js","docs.js","postings.js","ads.js","adwrite.js","xlsxfill.js","main.js"];
   var q = "?v=" + Math.floor(Date.now() / 300000);

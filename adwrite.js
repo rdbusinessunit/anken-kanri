@@ -55,16 +55,32 @@ const AIMS = {
   },
 };
 
-/* 媒体ごとの決まりごと */
-const MEDIA_RULE = {
-  'Airワーク': `- 媒体はAirワーク（Indeed連携）です
-- タイトルは全角30字以内。【派遣社員】で始める
-- キャッチコピーは全角50字以内
-- 絵文字は使いすぎない（多くて3つまで）`,
-  '求人BOX': `- 媒体は求人ボックスです
-- タイトルは全角40字以内
-- 検索で使われる言葉（職種名・地名・こだわり条件）をタイトルに入れる`,
+/* 媒体ごとの決まりごと。字数はエアワーク／求人ボックスの入力欄に合わせる */
+const MEDIA = {
+  'Airワーク': { titleMax: 30, catchMax: 50,
+    note: '- タイトルは【派遣社員】で始める\n- 絵文字は使いすぎない（多くて3つまで）' },
+  '求人BOX': { titleMax: 40, catchMax: 50,
+    note: '- 検索で使われる言葉（職種名・地名・こだわり条件）をタイトルに入れる' },
 };
+
+/* 実際に編集するのはこの4つだけ。給与や勤務時間は媒体側の入力欄で設定するので原稿には書かせない */
+const AW_FIELDS = [
+  { key: 'title', label: 'タイトル', max: m => m.titleMax },
+  { key: 'catch', label: '求人キャッチコピー', max: m => m.catchMax },
+  { key: 'body', label: '求人内容', max: () => 0 },
+  { key: 'want', label: '求める人材', max: () => 0 },
+];
+
+/* 同じ拠点で実際にクリック率が高かったタイトル。成績の裏づけがある手本として渡す */
+function topTitles(c, n = 6) {
+  const rows = adDocs().filter(d => d.media === 'Indeed' && d.kyoten === c.kyoten)
+    .flatMap(d => d.groups || [])
+    .filter(g => g.title && g.imp >= 80)
+    .map(g => ({ title: g.title, imp: g.imp, ctr: g.click / g.imp }))
+    .sort((a, b) => b.ctr - a.ctr);
+  const seen = new Set();
+  return rows.filter(r => { const k = r.title.slice(0, 20); if (seen.has(k)) return false; seen.add(k); return true; }).slice(0, n);
+}
 
 const awState = () => (S.aw = S.aw || { caseId: '', age: '', sex: '', attr: '', note: '', aim: 'ctr', media: 'Airワーク', draft: '' });
 
@@ -155,6 +171,8 @@ function buildPrompt(c, o) {
   const aim = AIMS[o.aim] || AIMS.ctr;
   const persona = [o.age, o.sex, o.attr].filter(x => x && x !== '年代は問わない' && x !== '男女問わず' && x !== '問わない');
   const prev = o.aim === 'repost' && c.jobAd && c.jobAd.text ? c.jobAd.text : '';
+  const M = MEDIA[o.media] || MEDIA['Airワーク'];
+  const tops = topTitles(c);
   return `あなたは製造業・工場系の人材派遣会社で、求人広告を書くプロです。
 下の案件データをもとに、求人原稿を日本語で作ってください。
 
@@ -167,14 +185,35 @@ ${aim.label}
 
 ${aim.order}
 
+# 出力の形（ここが大事です）
+次の4つだけを、この見出しのまま、この順で出力してください。ほかの項目は書かないでください。
+
+【タイトル】
+（全角${M.titleMax}字以内）
+
+【求人キャッチコピー】
+（全角${M.catchMax}字以内）
+
+【求人内容】
+
+【求める人材】
+
+給与・勤務時間・休日・勤務地・待遇・応募資格は、媒体の入力欄で別に設定します。
+**見出しとしては書かないでください。** ただし求人内容を書くときの材料としては使ってください。
+
 # 守ること
-${MEDIA_RULE[o.media] || ''}
-- 案件データにない条件（時給・手当・休日・待遇）は絶対に作らないこと。書けない項目は省く
+${M.note}
+- 案件データにない条件（時給・手当・休日・待遇）は絶対に作らないこと
 - 「アットホームな職場」「やりがい」のような、どの求人にも書ける言葉は使わない
-- 見出しは【タイトル】【キャッチコピー】【仕事内容】【給与】【勤務時間】【休日】【勤務地・アクセス】【応募資格】【待遇・福利厚生】【職場の雰囲気】の順
+- 字数は必ず守ること。超えたら削って収める
 ${prev ? `
 # 前回の原稿（これと重ならないように）
 ${prev}
+` : ''}
+${tops.length ? `
+# 同じ拠点で実際にクリック率が高かったタイトル（手本）
+数字は実績です。言い回しの型と、どこを押すと反応があるかの参考にしてください。真似ではなく傾向をつかむこと。
+${tops.map(x => `・${x.title}（CTR ${pct(x.ctr)}・表示${x.imp.toLocaleString()}）`).join('\n')}
 ` : ''}
 # 案件データ
 ${briefText(c)}`;
@@ -194,6 +233,8 @@ function viewAdWrite() {
       <b>${esc(v.label)}</b><span>${esc(v.hint)}</span></label>`).join('');
 
   const prompt = c ? buildPrompt(c, A) : '';
+  const M = MEDIA[A.media] || MEDIA['Airワーク'];
+  const fields = A.fields || null;
   const missing = c ? [
     !c.positions.some(p => p.pay) && '時給',
     !c.positions.some(p => detailText(p)) && '仕事内容',
@@ -208,7 +249,7 @@ function viewAdWrite() {
     <h3>1. どの案件の求人を作りますか</h3>
     <div class="fg"><div class="f"><label for="aw-case">案件</label>
       ${sel('aw-case', list.map(x => `${caseName(x)}｜${x.kyoten || '拠点未設定'}`), c ? `${caseName(c)}｜${c.kyoten || '拠点未設定'}` : '', '選んでください')}</div>
-      <div class="f"><label for="aw-media">媒体</label>${sel('aw-media', Object.keys(MEDIA_RULE), A.media)}</div></div>
+      <div class="f"><label for="aw-media">媒体</label>${sel('aw-media', Object.keys(MEDIA), A.media)}</div></div>
     ${missing.length ? `<div class="banner warn" style="margin-top:10px">この案件は <b>${missing.map(esc).join('・')}</b> が未入力です。その分、原稿が薄くなります。先に入力しておくと精度が上がります。</div>` : ''}
   </div>
 
@@ -240,13 +281,49 @@ function viewAdWrite() {
   </div>
 
   ${c ? `<div class="panel">
-    <h3>5. できた原稿を戻す（任意）</h3>
-    <p>AIが作った原稿をここに貼って保存すると、案件に残り、簡易求人票にも印刷されます。</p>
-    <textarea id="aw-draft" rows="10" placeholder="AIが作った原稿を貼り付け">${esc(A.draft || (c.jobAd || {}).text || '')}</textarea>
-    <div class="row" style="margin-top:8px"><button class="btn" data-act="awsave">この原稿を案件に保存</button>
+    <h3>5. AIの答えを貼る</h3>
+    <p>AIが出した文章をまるごとここに貼ってください。下の4項目に振り分けます。</p>
+    <textarea id="aw-draft" rows="8" placeholder="AIが出した文章をまるごと貼り付け">${esc(A.draft || (c.jobAd || {}).text || '')}</textarea>
+    <div class="row" style="margin-top:8px"><button class="btn primary" data-act="awsplit">4つに振り分ける</button>
+      <button class="btn" data-act="awsave">この原稿を案件に保存</button>
       ${(c.jobAd || {}).at ? `<span class="small muted">前回保存：${fmtDT(c.jobAd.at)} ${esc(c.jobAd.by || '')}</span>` : ''}
       <span class="spacer"></span><a class="btn ghost" href="#/doc/${esc(c.id)}/ad">簡易求人票を見る</a></div>
-  </div>` : ''}`;
+  </div>
+
+  ${fields ? `<div class="panel">
+    <h3>6. 1項目ずつコピーしてエアワークに貼る</h3>
+    <p>上限を超えている項目は赤くなります。</p>
+    ${AW_FIELDS.map(fd => fieldBoxHTML(fd, fields[fd.key] || '', M)).join('')}
+  </div>` : ''}` : ''}`;
+}
+
+/* 項目ごとの箱。テンプレートが入れ子になりすぎるので関数に出した */
+function fieldBoxHTML(fd, v, M) {
+  const max = fd.max(M);
+  const len = [...v].length;
+  const over = max && len > max;
+  const rows = fd.key === 'body' ? 10 : fd.key === 'want' ? 5 : 2;
+  return `<div class="awf${over ? ' over' : ''}">
+    <div class="row"><b>${esc(fd.label)}</b>
+      <span class="small ${over ? 'ngc' : 'muted'}">${len}${max ? ` / ${max}字` : '字'}${over ? '　超えています' : ''}</span>
+      <span class="spacer"></span>
+      <button class="btn sm" data-act="awcopyf" data-k="${fd.key}"${v ? '' : ' disabled'}>コピー</button></div>
+    <textarea data-awf="${fd.key}" rows="${rows}">${esc(v)}</textarea>
+  </div>`;
+}
+
+/* AIの答えを4項目に切り分ける。見出しの表記ゆれ（全角カッコ・■・#）も拾う */
+function awSplit(text) {
+  const names = { 'タイトル': 'title', '求人キャッチコピー': 'catch', 'キャッチコピー': 'catch', 'キャッチ': 'catch', '求人内容': 'body', '仕事内容': 'body', '求める人材': 'want', '求める人物像': 'want' };
+  const out = {}; let cur = null, buf = [];
+  const flush = () => { if (cur && buf.length) out[cur] = (out[cur] ? out[cur] + '\n' : '') + buf.join('\n').trim(); buf = []; };
+  for (const raw of String(text).split('\n')) {
+    const head = raw.trim().replace(/^[#＃■●・\s]*[【\[]?\s*/, '').replace(/\s*[】\]]?\s*[:：]?\s*$/, '');
+    if (names[head] !== undefined && raw.trim().length <= head.length + 6) { flush(); cur = names[head]; continue; }
+    if (cur) buf.push(raw);
+  }
+  flush();
+  return Object.keys(out).length ? out : null;
 }
 
 /* 画面で選んだ内容を控える。選ぶたびに作り直すので保存ボタンは要らない */
@@ -291,3 +368,24 @@ function awChange(el) {
 document.addEventListener('change', (e) => {
   if (e.target.name === 'aw-aim') { awState().aim = e.target.value; rerender(); }
 });
+
+/* 貼られた文章を4項目に振り分ける */
+function awDoSplit() {
+  const A = awState(); const text = ($('#aw-draft') || {}).value || '';
+  if (!text.trim()) { toast('先にAIの答えを貼ってください', 'warn'); return; }
+  A.draft = text;
+  const f = awSplit(text);
+  if (!f) { toast('見出し（【タイトル】など）が見つからず振り分けられませんでした。手で分けてください', 'warn'); return; }
+  A.fields = f;
+  const miss = AW_FIELDS.filter(x => !f[x.key]).map(x => x.label);
+  rerender();
+  toast(miss.length ? `振り分けました。${miss.join('・')}が見つかりません` : '4項目に振り分けました');
+}
+
+/* 項目ごとのコピー */
+async function awCopyField(key) {
+  const el = document.querySelector(`[data-awf="${key}"]`); if (!el) return;
+  const label = (AW_FIELDS.find(x => x.key === key) || {}).label || '';
+  try { await navigator.clipboard.writeText(el.value); toast(`${label}をコピーしました`); }
+  catch (e) { el.select(); toast('自動コピーができませんでした。Ctrl+C を押してください', 'warn'); }
+}

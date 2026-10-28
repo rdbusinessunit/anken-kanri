@@ -128,6 +128,7 @@ document.addEventListener('change', e => {
   if (t.dataset.filter && t.dataset.filter !== 'q') { S.filters[t.dataset.filter] = t.value; rerender(); return; }
   /* LINE通知の宛先は、選んだその場で保存する。
      画面は20秒ごとに作り直されるので、「設定を保存」まで持ち越すと選択が消えてしまう。 */
+  if (t.dataset.awf) { const A = awState(); (A.fields = A.fields || {})[t.dataset.awf] = t.value; rerender(); return; }
   if (t.id && t.id.startsWith('aw-')) { awChange(t); return; }
   if (t.dataset.lf) { saveLineFriend(t.dataset.lf).catch(e => { console.error(e); toast('保存できませんでした', 'warn'); }); return; }
   if (t.id === 'adsin' && t.files.length) { loadAdFiles([...t.files]).catch(e => { console.error(e); impState().busy = ''; toast('読み込めませんでした', 'warn'); rerender(); }); return; }
@@ -258,6 +259,8 @@ const ACT = {
   impsave: () => impSave(),
   impfeed: () => loadBoardFeeds(),
   awcopy: () => awCopy(),
+  awsplit: () => awDoSplit(),
+  awcopyf: (b) => awCopyField(b.dataset.k),
   awsave: () => awSave(),
   kbnamesave: () => kbNameSave(),
   adsort(b) { S.adf.sort = b.dataset.v; rerender(); },
