@@ -353,6 +353,18 @@ table.list tbody tr.click:hover td{background:var(--accent-soft)}
 .lastrun.ok{border-left-color:var(--ok)}
 .lastrun.ng{border-left-color:var(--crit)}
 .lastrun.ng b{color:var(--crit)}
+/* 求人作成 */
+.aims{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:10px}
+.aim{display:grid;gap:3px;padding:13px 15px;border:2px solid var(--line);border-radius:10px;cursor:pointer;background:var(--surface)}
+.aim:hover{border-color:var(--accent)}
+.aim.on{border-color:var(--accent);background:var(--accent-soft)}
+.aim input{position:absolute;opacity:0;pointer-events:none}
+.aim b{font-size:16px;color:var(--ink)}
+.aim span{font-size:13.5px;color:var(--ink-3);line-height:1.6}
+.aim.on b{color:var(--accent)}
+pre.prompt{margin:10px 0 0;padding:14px 16px;background:var(--surface-2,#F3F6F4);border:1px solid var(--line);border-radius:9px;
+  font-family:'Consolas','Courier New',monospace;font-size:13px;line-height:1.75;color:var(--ink);
+  white-space:pre-wrap;word-break:break-word;max-height:460px;overflow:auto}
 @media(max-width:760px){.lfrow{grid-template-columns:1fr;gap:6px}}
 .tabs .cnt.crit{background:var(--crit);color:#fff;border-color:var(--crit)}
 .hist{list-style:none;margin:0;padding:0;display:grid;gap:0}
@@ -472,6 +484,7 @@ try { var t0 = localStorage.getItem('bring-theme') || 'light'; if (t0 === 'light
       <a href="#/cases" data-nav="cases">案件一覧</a>
       <a href="#/new" data-nav="new">新規受注</a>
       <a href="#/postings" data-nav="postings">求人管理</a>
+      <a href="#/write" data-nav="write">求人作成</a>
       <!-- 成績優先度ボードは別ページ。作りが違う(React)ため同じページには載せられない -->
       <a href="./board/">成績ボード</a>
       <a href="#/settings" data-nav="settings">設定</a>
@@ -488,6 +501,7 @@ try { var t0 = localStorage.getItem('bring-theme') || 'light'; if (t0 === 'light
   <a href="#/cases" data-nav="cases"><b>≡</b>案件</a>
   <a href="#/new" data-nav="new"><b>＋</b>新規受注</a>
   <a href="#/postings" data-nav="postings"><b>▤</b>求人</a>
+  <a href="#/write" data-nav="write"><b>✎</b>作成</a>
   <a href="./board/"><b>★</b>成績</a>
   <a href="#/settings" data-nav="settings"><b>⚙</b>設定</a>
 </nav>
@@ -500,9 +514,9 @@ try { var t0 = localStorage.getItem('bring-theme') || 'light'; if (t0 === 'light
 /* 画面の更新が利用者に届くようにする仕組み
    ・JavaScriptは5分ごとに新しいものを取りにいく
    ・version.json の版番号がこのページより新しければ、自動で読み直す */
-const APP_VERSION = "202610201322";
+const APP_VERSION = "202610281002";
 (function () {
-  var files = ["config.js","ref.js","core.js","caseview.js","docs.js","postings.js","ads.js","xlsxfill.js","main.js"];
+  var files = ["config.js","ref.js","core.js","caseview.js","docs.js","postings.js","ads.js","adwrite.js","xlsxfill.js","main.js"];
   var q = "?v=" + Math.floor(Date.now() / 300000);
   files.forEach(function (f) {
     var el = document.createElement("script");

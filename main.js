@@ -26,6 +26,7 @@ function render() {
     case 'doc': html = viewDoc(r); break;
     case 'postings': html = viewPostings(); break;
     case 'ads': html = viewAds(); break;
+    case 'write': html = viewAdWrite(); break;
     case 'settings': html = viewSettings(); break;
     default: html = viewList();
   }
@@ -127,6 +128,7 @@ document.addEventListener('change', e => {
   if (t.dataset.filter && t.dataset.filter !== 'q') { S.filters[t.dataset.filter] = t.value; rerender(); return; }
   /* LINE通知の宛先は、選んだその場で保存する。
      画面は20秒ごとに作り直されるので、「設定を保存」まで持ち越すと選択が消えてしまう。 */
+  if (t.id && t.id.startsWith('aw-')) { awChange(t); return; }
   if (t.dataset.lf) { saveLineFriend(t.dataset.lf).catch(e => { console.error(e); toast('保存できませんでした', 'warn'); }); return; }
   if (t.id === 'adsin' && t.files.length) { loadAdFiles([...t.files]).catch(e => { console.error(e); impState().busy = ''; toast('読み込めませんでした', 'warn'); rerender(); }); return; }
   if (t.dataset.impk !== undefined) { const I = impState(); I.files[+t.dataset.impk].kyoten = t.value; I.v++; rerender(); return; }
@@ -257,6 +259,8 @@ const ACT = {
   impdrop(b) { const I = impState(); I.files.splice(+b.dataset.i, 1); I.v++; rerender(); },
   impsave: () => impSave(),
   impfeed: () => loadBoardFeeds(),
+  awcopy: () => awCopy(),
+  awsave: () => awSave(),
   kbnamesave: () => kbNameSave(),
   kbai() { if (!needMe()) kbAI(); },
   adsort(b) { S.adf.sort = b.dataset.v; rerender(); },
