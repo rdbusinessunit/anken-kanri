@@ -247,12 +247,10 @@ const ACT = {
     const c = normalizeCase(S.cases[curId()]); const t = parseRoute().tab || 'ringi';
     if (TEMPLATES[t]) exportTemplate(t, c, 0); else exportXlsx(c, t);
   },
-  aiad() { if (!needMe()) aiJobAd(curId()); },
   openp(b, e) { if (e.target.closest('a,button,input,select')) return; S.open = S.open === b.dataset.id ? null : b.dataset.id; rerender(); },
   async addpost(b) { const id = uid(); await Store.put('postings', id, { id, caseId: b.dataset.id, media: cfg().media[0] || '', count: 1, url: '', start: today(), nextFix: addDays(today(), cfg().fixDays), lastFix: today(), status: '掲載中', imp: '', click: '', apply: '', updatedAt: nowISO(), updatedBy: S.me }); },
   async fixed(b) { const p = S.postings[b.dataset.id]; await Store.put('postings', p.id, { ...p, lastFix: today(), nextFix: addDays(today(), cfg().fixDays), updatedAt: nowISO(), updatedBy: S.me }); toast(`次回修正日を${fmtMD(addDays(today(), cfg().fixDays))}にしました`); },
   async delpost(b) { await Store.del('postings', b.dataset.id); },
-  aireview(b) { if (!needMe()) aiReview(b.dataset.id); },
   exp(b) { const sel = $('#exppos'); exportTemplate(b.dataset.kind, S.draft, sel ? +sel.value : 0); },
   savecfg: saveConfig, backup,
   async retry(b) { b.disabled = true; b.textContent = '接続しています…'; await Store.refresh(); rerender(); },
@@ -262,7 +260,6 @@ const ACT = {
   awcopy: () => awCopy(),
   awsave: () => awSave(),
   kbnamesave: () => kbNameSave(),
-  kbai() { if (!needMe()) kbAI(); },
   adsort(b) { S.adf.sort = b.dataset.v; rerender(); },
   adst(b) { S.adf.st = b.dataset.v; rerender(); },
   /* 課題と対応の記録。どれも押した時点で保存する（下書きの「保存」を待たせない） */

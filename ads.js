@@ -316,11 +316,9 @@ function kbNameTool(P) {
   const list = P.kb.groups.filter(g => g.key.startsWith('A|') && (g.n || g.hold)).sort((a, b) => (!!a.name - !!b.name) || (b.n + b.hold) - (a.n + a.hold));
   const unnamed = list.filter(g => !g.name);
   const names = [...new Set([...P.indeedGroups.map(g => g.name), ...P.kb.groups.filter(g => g.name).map(g => g.name), ...Object.values(S.cases).map(c => c.company.name)].filter(Boolean))];
-  const ai = I.ai;
   return `<section class="panel" style="padding:16px 18px">
     <div class="row"><h2 style="font-size:17px">求人ラベルのない求人ボックス求人に案件名を付ける</h2><span class="spacer"></span><button class="btn sm primary" data-act="kbnamesave">名前を保存</button></div>
     <p class="small muted" style="margin:6px 0 12px;max-width:85ch">採用ボードで求人ラベルが空の求人は、勤務地×時給でまとめています（未命名 ${unnamed.length}件）。一度名前を付ければ次回の取込でも自動で使います。採用ボードで求人ラベルを付けて入稿すれば、この作業は不要になります。</p>
-    <div id="kbaimsg">${ai ? (ai.busy ? '<p class="small muted">AIが候補を考えています…（1分ほど）</p>' : ai.err ? `<p class="small" style="color:var(--crit)">${esc(ai.err)}</p>` : `<p class="small muted">AIの候補を入れました（${ai.n}件）。確認してから「名前を保存」を押してください。</p>`) : ''}</div>
     <datalist id="dl-adnames">${names.map(n => `<option value="${esc(n)}">`).join('')}</datalist>
     <div class="scroll-x"><table class="ptab kbn"><thead><tr><th>勤務地</th><th style="text-align:right">時給</th><th style="text-align:right">公開</th><th style="text-align:right">保留</th><th>求人タイトルの例</th><th style="min-width:180px">案件名</th><th style="width:70px">番号</th><th style="width:110px">拠点</th></tr></thead><tbody>
     ${list.map(g => { const ak = g.key.slice(2); const sg = I.suggest[ak] || {}; const v = g.name || sg.name || g.suggest || ''; return `<tr data-gk="${esc(ak)}"><td class="small">${esc(addrShort(g.addr))}</td><td class="n" style="text-align:right">${g.wage ? g.wage.toLocaleString() : ''}</td><td class="n" style="text-align:right">${g.n}</td><td class="n" style="text-align:right">${g.hold || ''}</td><td class="small muted">${esc(g.title)}</td>
@@ -338,35 +336,6 @@ async function kbNameSave() {
   });
   await Store.put('ads', 'kbmap', { groups: map, updatedAt: nowISO(), updatedBy: S.me });
   I.suggest = {}; I.v++; toast('案件名を保存しました'); rerender();
-}
-async function kbAI() {
-  const I = impState(); const P = impParse(); if (!P.kb) return;
-  const targets = P.kb.groups.filter(g => g.key.startsWith('A|') && !g.name && (g.n || g.hold)).slice(0, 80);
-  const sample = window.claude && window.claude.use ? await window.claude.use('sample') : null;
-  if (!sample) { toast('この表示ではAIを利用できません', 'warn'); return; }
-  I.ai = { busy: true }; $('#kbaimsg').innerHTML = '<p class="small muted">AIが候補を考えています…（1分ほど）</p>';
-  const cands = [
-    ...P.indeedGroups.filter((g, i, a) => a.findIndex(y => y.name === g.name) === i).slice(0, 150).map(g => `Indeed｜${g.kyoten}｜${g.code || '-'}｜${g.name}｜${g.title || ''}`),
-    ...P.kb.groups.filter(g => g.name).map(g => `求人BOXラベル｜${g.kyoten}｜${g.code || '-'}｜${g.name}｜${addrShort(g.addr)} 時給${g.wage}`),
-    ...Object.values(S.cases).map(c => `台帳｜${c.kyoten || '-'}｜-｜${c.company.name} ${c.company.plant || ''}｜${c.company.address || ''}`),
-  ].join('\n');
-  const prompt = `人材派遣会社の求人ボックス掲載データの整理です。「対象」は、案件名（派遣先の名前）が付いていない求人のまとまり（勤務地×時給）です。「候補」から同じ派遣先・同じ仕事のものを選び、案件名を付けてください。
-- 候補の案件名はそのまま使う（例：「トーダン」「LIXIL岩井」）。地名・時給・仕事内容（タイトル）が一致するものを選ぶ
-- 一致する候補がなければ、勤務地と仕事内容から短い案件名をつけ、codeは空、confidenceは「低」
-- kyotenは候補の拠点（plus-i など）。分からなければ空
-出力はJSON配列のみ：[{"key":"対象のkey","name":"案件名","code":"番号または空","kyoten":"plus-i","confidence":"高|中|低","reason":"一致した根拠（短く）"}]
-
-候補（出所｜拠点｜番号｜案件名｜Indeedタイトル・住所など）：
-${cands}
-
-対象（key｜勤務地｜時給｜件数｜タイトル例）：
-${targets.map(g => `${g.key.slice(2)}｜${addrShort(g.addr)}｜${g.wage}｜${g.n + g.hold}｜${g.title}`).join('\n')}`;
-  try {
-    const res = await sample.json(prompt, { cache: false });
-    let n = 0; (Array.isArray(res) ? res : []).forEach(x => { if (x && x.key && x.name) { I.suggest[x.key] = { name: String(x.name), code: codeNorm(x.code), kyoten: cfg().kyotens.some(k => k.id === x.kyoten) ? x.kyoten : '', reason: `AI（${x.confidence || '—'}）：${x.reason || ''}` }; n++; } });
-    I.ai = { n };
-  } catch (e) { I.ai = { err: AI_ERR(e) }; }
-  rerender();
 }
 async function impSave() {
   if (needMe()) return;

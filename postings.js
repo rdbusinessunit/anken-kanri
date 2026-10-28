@@ -139,7 +139,7 @@ function postingDetail(c, groups = adGroupsFor(c)) {
       ${st.total ? `<div class="funnel">${funnel.map(([k, v], i) => `<div><div class="k">${k}</div><div class="v">${v}</div><div class="p">${i ? pct(st.total ? v / st.total : null) : `年齢NG ${st.ageNG}`}</div></div>`).join('')}</div>
       <div class="row" style="align-items:flex-end;gap:18px"><div class="bars" style="flex:1;min-width:200px">${mediaRows.slice(0, 6).map(([m, v]) => `<div class="b"><span>${esc(m)}</span><i style="width:${v / mmax * 100}%"></i><span>${v}</span></div>`).join('')}</div>${sparkSVG(st.byMonth)}</div>
       <p class="small muted" style="margin:8px 0 0">照合した名称：${st.names.slice(0, 6).map(esc).join('、')}${st.names.length > 6 ? ` ほか${st.names.length - 6}` : ''}</p>` : `<p class="small muted">一致する応募がありません。<a href="#/case/${c.id}/log">応募シートでの名称</a>を設定してください。</p>`}
-      ${rv ? `<div class="ai"><h4 style="margin:0">AI求人診断（Claude版で実施した結果）</h4>${aiReviewHTML(rv, c.id)}</div>` : ''}
+      ${rv ? `<div class="ai"><h4 style="margin:0">AI求人診断（過去にClaudeの画面で実施した結果）</h4>${aiReviewHTML(rv, c.id)}</div>` : ''}
     </div></div>`;
 }
 function aiReviewHTML(rv, caseId) {
@@ -168,49 +168,6 @@ function caseBrief(c) {
     求人広告の取込実績: adGroupsFor(c).map(g => ({ 媒体: Object.keys(g.media)[0], 案件: g.name, 番号: g.code || '', ...(x => ({ 件数: x.n, 表示: x.imp, クリック: x.click, CTR: x.imp ? pct(x.click / x.imp) : null, 応募: x.apply, 費用: x.cost }))(Object.values(g.media)[0]) })).slice(0, 30),
     応募シート実績: { 応募: st.total, 年齢NG: st.ageNG, 面接実施: st.interviewed, 提案: st.proposed, 見学: st.kengaku, 入社: st.nyusha, 媒体別: st.byMedia, 月別: st.byMonth },
   };
-}
-const AI_ERR = e => ({ not_granted: 'AIの利用が許可されていません', sampling_disabled: 'このアカウントではAIを利用できません', rate_limited: 'AIの利用が混み合っています。少し待ってから押してください', invalid_json: 'AIの回答を読み取れませんでした。もう一度押してください', refused: 'AIがこの内容への回答を控えました' }[e && e.code] || 'AIに接続できませんでした（' + (e && e.code || 'error') + '）');
-async function aiReview(id) {
-  const box = $('#ai-' + id); const c = normalizeCase(S.cases[id]);
-  const sample = window.claude && window.claude.use ? await window.claude.use('sample') : null;
-  if (!sample) { box.innerHTML = '<p class="small muted">この表示ではAIを利用できません。</p>'; return; }
-  box.innerHTML = '<p class="small muted">診断しています…（30秒ほどかかります）</p>';
-  const prompt = `あなたは製造業・工場系の人材派遣会社で、求人広告の効果を厳しく評価するアドバイザーです。
-以下の案件データを読み、応募が集まり、面接・入社まで進むために「労働条件」と「求人原稿」をどう変えるべきかを、遠慮せず具体的に指摘してください。
-- 根拠はデータの数字で示す。データにないことは「推測」と明記する
-- 時給を上げる提案は、原価率がしきい値を超えない範囲かどうかにも触れる
-- 年齢NGが多い場合は、年齢条件の書き方・媒体の選び方にも触れる
-- 掲載日数が長く応募が少ない場合は、原稿の修正点を具体的に
-出力はJSONのみ。形式：
-{"verdict":"要改善|要注意|良好","summary":"2文以内","issues":[{"area":"時給|勤務形態|仕事内容|年齢条件|掲載・媒体|原稿|職場環境|その他","finding":"何が問題か（数字つき）","action":"何をどう変えるか","priority":"高|中|低"}],"conditionChanges":[{"item":"項目","now":"現状","proposal":"変更案","reason":"理由"}],"adTitle":"改善後の求人タイトル案（30字以内）"}
-issuesは重要な順に最大6件。
-
-案件データ：
-${JSON.stringify(caseBrief(c)).slice(0, 12000)}`;
-  try {
-    const result = await sample.json(prompt, { cache: false });
-    await mutate(id, x => { x.aiReview = { at: nowISO(), by: S.me, result }; }, 'AI求人診断を実行', true);
-  } catch (e) { box.innerHTML = `<p class="small" style="color:var(--crit)">${esc(AI_ERR(e))}</p>`; }
-}
-async function aiJobAd(id) {
-  const out = $('#aiadout'); const c = normalizeCase(S.cases[id]);
-  const sample = window.claude && window.claude.use ? await window.claude.use('sample') : null;
-  if (!sample) { toast('この表示ではAIを利用できません', 'warn'); return; }
-  out.innerHTML = `<div class="panel" style="padding:14px 16px;margin-bottom:16px"><div class="eyebrow">AIが作成中</div><div class="adtext" id="aiadtext" style="margin-top:8px">考えています…</div></div>`;
-  const prompt = `工場・製造業の派遣求人（Airワーク・求人ボックス向け）の求人原稿を日本語で作ってください。
-- 入力データにない条件（時給・手当・休日・待遇）は絶対に作らない。書けない項目は省く
-- 仕事内容は、未経験者が1日の流れを想像できるように具体的に
-- 職場環境・現場実態のうち応募の後押しになる事実を使う。マイナス情報は正直に、ただし対策と一緒に書く
-- 見出しは【タイトル】【キャッチコピー】【仕事内容】【給与】【勤務時間】【休日】【勤務地・アクセス】【応募資格】【待遇・福利厚生】【職場の雰囲気】の順
-- タイトルは30字以内、キャッチコピーは50字以内
-
-データ：
-${JSON.stringify(caseBrief(c)).slice(0, 12000)}`;
-  try {
-    const { text } = await sample(prompt, { cache: false, onText: ({ text }) => { const el = $('#aiadtext'); if (el) el.textContent = text; } });
-    await mutate(id, x => { x.jobAd = { text, at: nowISO(), by: S.me }; }, 'AIで求人原稿を作成', true);
-    toast('求人原稿を保存しました');
-  } catch (e) { out.innerHTML = `<div class="banner warn">${esc(AI_ERR(e))}</div>`; }
 }
 
 /* ===== 設定 ===== */
