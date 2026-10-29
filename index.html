@@ -362,6 +362,8 @@ table.list tbody tr.click:hover td{background:var(--accent-soft)}
 .aim b{font-size:16px;color:var(--ink)}
 .aim span{font-size:13.5px;color:var(--ink-3);line-height:1.6}
 .aim.on b{color:var(--accent)}
+.seg-f button .n{margin-left:7px;font-size:12px;font-weight:700;opacity:.75}
+.seg-f button[aria-pressed="true"] .n{opacity:1}
 .awopt{display:flex;gap:10px;align-items:flex-start;padding:10px 13px;border:2px solid var(--line);border-radius:10px;margin:0 0 8px;cursor:pointer;background:var(--surface)}
 .awopt:hover{border-color:var(--accent)}
 .awopt input{margin-top:3px;width:18px;height:18px;flex:0 0 auto}
@@ -526,7 +528,7 @@ try { var t0 = localStorage.getItem('bring-theme') || 'light'; if (t0 === 'light
 /* 画面の更新が利用者に届くようにする仕組み
    ・JavaScriptは5分ごとに新しいものを取りにいく
    ・version.json の版番号がこのページより新しければ、自動で読み直す */
-const APP_VERSION = "202610291013";
+const APP_VERSION = "202610291600";
 (function () {
   var files = ["config.js","ref.js","core.js","caseview.js","docs.js","postings.js","ads.js","adwrite.js","xlsxfill.js","main.js"];
   var q = "?v=" + Math.floor(Date.now() / 300000);

@@ -55,9 +55,15 @@ function viewList() {
   const F = S.filters, C = cfg();
   const all = Object.values(S.cases).map(normalizeCase);
   const attn = all.flatMap(c => alertsFor(c).map(a => ({ ...a, c }))).sort((x, y) => TONE_ORDER[x.tone] - TONE_ORDER[y.tone]);
-  let rows = all.filter(c => (!F.kyoten || c.kyoten === F.kyoten) && (!F.tanto || c.tanto === F.tanto) && (!F.stage || stage(c).k === F.stage) && (!F.q || norm(caseName(c) + c.tanto).includes(norm(F.q))));
+  let rows = all.filter(c => (!F.kyoten || (F.kyoten === '__none' ? !c.kyoten : c.kyoten === F.kyoten)) && (!F.tanto || c.tanto === F.tanto) && (!F.stage || stage(c).k === F.stage) && (!F.q || norm(caseName(c) + c.tanto).includes(norm(F.q))));
   rows.sort((a, b) => (a.flow.closed - b.flow.closed) || String(b.updatedAt).localeCompare(String(a.updatedAt)));
+  /* 案件が増えると拠点で絞るのが主になるので、ボタンに件数を出す。
+     拠点が決まっていない案件は、専用のボタンを出さないとどこからも開けない。 */
   const kyos = C.kyotens.map(k => k.id);
+  const kyoN = id => all.filter(c => (c.kyoten || '') === id).length;
+  const noKyo = kyoN('');
+  const kyoBtn = (v, label, n) =>
+    `<button data-act="fk" data-v="${esc(v)}" aria-pressed="${F.kyoten === v}">${esc(label)}<span class="n">${n}</span></button>`;
   const attnHTML = attn.length ? `<section class="attn"><h2>いま対応が必要な案件<span class="cnt">${attn.length}件</span></h2><ul>${attn.slice(0, 12).map(a => `<li><a href="#/case/${a.c.id}"><span class="sev ${a.tone}"></span><span><span class="nm">${esc(caseName(a.c))}</span><span class="msg">${esc(a.text)}</span></span><span class="go">${esc(a.c.tanto || '')}</span></a></li>`).join('')}</ul>${attn.length > 12 ? `<p class="small muted">ほか${attn.length - 12}件</p>` : ''}</section>` : '';
   const st = c => { const s = stage(c); return chip(s.label, s.tone); };
   const pc = c => sum(postingsOf(c.id).filter(p => p.status !== '停止').map(p => +p.count || 0));
@@ -75,7 +81,7 @@ function viewList() {
   return `<div class="pagehead"><div><div class="eyebrow">CASES</div><h1>案件一覧</h1></div><span class="sub">${all.length}件 ・ 原価率しきい値 ${C.threshold}%</span><span class="spacer"></span><a class="btn primary" href="#/new">＋ 新規受注を登録</a></div>
   ${attnHTML}
   <div class="filters">
-    <div class="seg-f" role="group" aria-label="拠点"><button data-act="fk" data-v="" aria-pressed="${!F.kyoten}">全拠点</button>${kyos.map(k => `<button data-act="fk" data-v="${esc(k)}" aria-pressed="${F.kyoten === k}">${esc(k)}</button>`).join('')}</div>
+    <div class="seg-f" role="group" aria-label="拠点">${kyoBtn('', '全拠点', all.length)}${kyos.map(k => kyoBtn(k, k, kyoN(k))).join('')}${noKyo ? kyoBtn('__none', '拠点未設定', noKyo) : ''}</div>
     <select data-filter="tanto" aria-label="担当"><option value="">担当：全員</option>${C.staff.map(s => `<option${F.tanto === s ? ' selected' : ''}>${esc(s)}</option>`).join('')}</select>
     <select data-filter="stage" aria-label="段階"><option value="">段階：すべて</option>${STAGES.map(([k, l]) => `<option value="${k}"${F.stage === k ? ' selected' : ''}>${l}</option>`).join('')}</select>
     <input type="search" data-filter="q" placeholder="企業名・担当で検索" value="${esc(F.q)}" aria-label="検索">
