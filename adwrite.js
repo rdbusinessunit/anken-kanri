@@ -57,19 +57,37 @@ const AIMS = {
 
 /* 媒体ごとの決まりごと。字数はエアワーク／求人ボックスの入力欄に合わせる */
 const MEDIA = {
-  'Airワーク': { titleMax: 30, catchMax: 50,
-    note: '- タイトルは【派遣社員】で始める\n- 絵文字は使いすぎない（多くて3つまで）' },
-  '求人BOX': { titleMax: 40, catchMax: 50,
+  'Airワーク': { titleMax: 30, catchMax: 30,
+    note: '- タイトルは【派遣社員】で始める' },
+  '求人BOX': { titleMax: 40, catchMax: 30,
     note: '- 検索で使われる言葉（職種名・地名・こだわり条件）をタイトルに入れる' },
 };
 
-/* 実際に編集するのはこの4つだけ。給与や勤務時間は媒体側の入力欄で設定するので原稿には書かせない */
+/* 実際に編集するのはこの5つだけ。給与や勤務時間は媒体側の入力欄で設定するので原稿には書かせない */
 const AW_FIELDS = [
   { key: 'title', label: 'タイトル', max: m => m.titleMax },
   { key: 'catch', label: '求人キャッチコピー', max: m => m.catchMax },
-  { key: 'body', label: '求人内容', max: () => 0 },
-  { key: 'want', label: '求める人材', max: () => 0 },
+  { key: 'body', label: '求人内容', max: () => 0, len: o => o.lenBody },
+  { key: 'want', label: '求める人材', max: () => 0, len: o => o.lenWant },
+  { key: 'env', label: '職場環境', max: () => 0 },
 ];
+
+/* 書き方のオプション。媒体やペルソナでは決まらない「見た目の好み」をここで選ぶ */
+const DECOS = {
+  none: { label: '指定しない', hint: 'AIにまかせます', order: '' },
+  emoji: {
+    label: '絵文字を中心に', hint: 'スマホの一覧で目を引きます',
+    order: `- 絵文字を積極的に使ってください。見出しや箇条書きの先頭に置きます
+- ただし1行に2つまで。並べすぎると読みにくくなります
+- 仕事内容・条件に関係する絵文字を選ぶこと（意味のない飾りは入れない）`,
+  },
+  mark: {
+    label: '記号を中心に', hint: '固くなりすぎず、読みやすく整います',
+    order: `- 絵文字は使わないでください
+- 代わりに記号（■ ◆ ▼ ／ ｜ ★）で区切り、項目の頭に置いて整理します
+- 箇条書きは「・」でそろえること`,
+  },
+};
 
 /* 同じ拠点で実際にクリック率が高かったタイトル。成績の裏づけがある手本として渡す */
 function topTitles(c, n = 6) {
@@ -82,7 +100,10 @@ function topTitles(c, n = 6) {
   return rows.filter(r => { const k = r.title.slice(0, 20); if (seen.has(k)) return false; seen.add(k); return true; }).slice(0, n);
 }
 
-const awState = () => (S.aw = S.aw || { caseId: '', age: '', sex: '', attr: '', note: '', aim: 'ctr', media: 'Airワーク', draft: '' });
+const awState = () => (S.aw = S.aw || {
+  caseId: '', age: '', sex: '', attr: '', note: '', aim: 'ctr', media: 'Airワーク', draft: '',
+  deco: 'none', narrow: false, lenOn: false, lenBody: 700, lenWant: 300,
+});
 
 /* プロンプトに入れる案件情報。JSONのままだと人が確認できないので、読める日本語にする */
 function briefText(c) {
@@ -173,6 +194,7 @@ function buildPrompt(c, o) {
   const prev = o.aim === 'repost' && c.jobAd && c.jobAd.text ? c.jobAd.text : '';
   const M = MEDIA[o.media] || MEDIA['Airワーク'];
   const tops = topTitles(c);
+  const deco = DECOS[o.deco] || DECOS.none;
   return `あなたは製造業・工場系の人材派遣会社で、求人広告を書くプロです。
 下の案件データをもとに、求人原稿を日本語で作ってください。
 
@@ -186,7 +208,7 @@ ${aim.label}
 ${aim.order}
 
 # 出力の形（ここが大事です）
-次の4つだけを、この見出しのまま、この順で出力してください。ほかの項目は書かないでください。
+次の5つだけを、この見出しのまま、この順で出力してください。ほかの項目は書かないでください。
 
 【タイトル】
 （全角${M.titleMax}字以内）
@@ -195,8 +217,10 @@ ${aim.order}
 （全角${M.catchMax}字以内）
 
 【求人内容】
-
+${o.lenOn ? `（全角${o.lenBody}字ちょうどを目指す。前後20字までのずれは可）` : ''}
 【求める人材】
+${o.lenOn ? `（全角${o.lenWant}字程度）` : ''}
+【職場環境】
 
 給与・勤務時間・休日・勤務地・待遇・応募資格は、媒体の入力欄で別に設定します。
 **見出しとしては書かないでください。** ただし求人内容を書くときの材料としては使ってください。
@@ -206,6 +230,14 @@ ${M.note}
 - 案件データにない条件（時給・手当・休日・待遇）は絶対に作らないこと
 - 「アットホームな職場」「やりがい」のような、どの求人にも書ける言葉は使わない
 - 字数は必ず守ること。超えたら削って収める
+${deco.order ? `
+# 書き方
+${deco.order}` : ''}${o.narrow ? `
+
+# スマホで読むことを前提にする
+- 1行は全角20字以内で改行してください
+- 長い文は途中で切って2行にする。読点のあとで改行すると読みやすくなります
+- スマホの画面では1行が長いと読み飛ばされます` : ''}
 ${prev ? `
 # 前回の原稿（これと重ならないように）
 ${prev}
@@ -232,6 +264,9 @@ function viewAdWrite() {
     `<label class="aim${A.aim === k ? ' on' : ''}"><input type="radio" name="aw-aim" value="${k}"${A.aim === k ? ' checked' : ''}>
       <b>${esc(v.label)}</b><span>${esc(v.hint)}</span></label>`).join('');
 
+  const decoBtns = Object.entries(DECOS).map(([k, v]) =>
+    `<label class="aim${A.deco === k ? ' on' : ''}"><input type="radio" name="aw-deco" value="${k}"${A.deco === k ? ' checked' : ''}>
+      <b>${esc(v.label)}</b><span>${esc(v.hint)}</span></label>`).join('');
   const prompt = c ? buildPrompt(c, A) : '';
   const M = MEDIA[A.media] || MEDIA['Airワーク'];
   const fields = A.fields || null;
@@ -272,7 +307,24 @@ function viewAdWrite() {
   </div>
 
   <div class="panel">
-    <div class="row"><h3 style="margin:0">4. この文章をAIに貼ってください</h3><span class="spacer"></span>
+    <h3>4. 書き方（任意）</h3>
+    <p>決めなくても作れます。見た目の好みや、媒体の都合に合わせたいときだけ使ってください。</p>
+    <div class="aims" style="margin-bottom:14px">${decoBtns}</div>
+    <label class="awopt"><input type="checkbox" id="aw-narrow"${A.narrow ? ' checked' : ''}>
+      <span><b>スマホ向けに1行を短くする</b>1行あたり全角20字以内で改行させます</span></label>
+    <label class="awopt"><input type="checkbox" id="aw-lenOn"${A.lenOn ? ' checked' : ''}>
+      <span><b>文字数の目安を指定する</b>長さがばらつくときに使います</span></label>
+    ${A.lenOn ? `<div class="fg" style="margin-top:4px">
+      <div class="f"><label for="aw-lenBody">求人内容</label>
+        <div class="suffix"><input class="inp" id="aw-lenBody" type="number" step="50" min="100" value="${A.lenBody}"><span>字</span></div>
+        <small>この字数ちょうどを目指させます</small></div>
+      <div class="f"><label for="aw-lenWant">求める人材</label>
+        <div class="suffix"><input class="inp" id="aw-lenWant" type="number" step="50" min="50" value="${A.lenWant}"><span>字</span></div>
+        <small>おおよその目安として伝えます</small></div></div>` : ''}
+  </div>
+
+  <div class="panel">
+    <div class="row"><h3 style="margin:0">5. この文章をAIに貼ってください</h3><span class="spacer"></span>
       <button class="btn primary" data-act="awcopy"${c ? '' : ' disabled'}>プロンプトをコピー</button></div>
     ${c ? `<p>ジェンスパーク・Claude・ChatGPTなど、お使いのAIの入力欄に貼り付けてください。</p>
       <pre class="prompt" id="aw-prompt">${esc(prompt)}</pre>
@@ -281,7 +333,7 @@ function viewAdWrite() {
   </div>
 
   ${c ? `<div class="panel">
-    <h3>5. AIの答えを貼る</h3>
+    <h3>6. AIの答えを貼る</h3>
     <p>AIが出した文章をまるごとここに貼ってください。下の4項目に振り分けます。</p>
     <textarea id="aw-draft" rows="8" placeholder="AIが出した文章をまるごと貼り付け">${esc(A.draft || (c.jobAd || {}).text || '')}</textarea>
     <div class="row" style="margin-top:8px"><button class="btn primary" data-act="awsplit">4つに振り分ける</button>
@@ -291,7 +343,7 @@ function viewAdWrite() {
   </div>
 
   ${fields ? `<div class="panel">
-    <h3>6. 1項目ずつコピーしてエアワークに貼る</h3>
+    <h3>7. 1項目ずつコピーしてエアワークに貼る</h3>
     <p>上限を超えている項目は赤くなります。</p>
     ${AW_FIELDS.map(fd => fieldBoxHTML(fd, fields[fd.key] || '', M)).join('')}
   </div>` : ''}` : ''}`;
@@ -314,7 +366,7 @@ function fieldBoxHTML(fd, v, M) {
 
 /* AIの答えを4項目に切り分ける。見出しの表記ゆれ（全角カッコ・■・#）も拾う */
 function awSplit(text) {
-  const names = { 'タイトル': 'title', '求人キャッチコピー': 'catch', 'キャッチコピー': 'catch', 'キャッチ': 'catch', '求人内容': 'body', '仕事内容': 'body', '求める人材': 'want', '求める人物像': 'want' };
+  const names = { 'タイトル': 'title', '求人キャッチコピー': 'catch', 'キャッチコピー': 'catch', 'キャッチ': 'catch', '求人内容': 'body', '仕事内容': 'body', '求める人材': 'want', '求める人物像': 'want', '職場環境': 'env', '職場の雰囲気': 'env', '職場の環境': 'env' };
   const out = {}; let cur = null, buf = [];
   const flush = () => { if (cur && buf.length) out[cur] = (out[cur] ? out[cur] + '\n' : '') + buf.join('\n').trim(); buf = []; };
   for (const raw of String(text).split('\n')) {
@@ -361,12 +413,15 @@ function awChange(el) {
     A.caseId = hit ? hit.id : '';
     A.draft = '';
   } else if (el.id === 'aw-draft') { A.draft = el.value; return; }
+  else if (el.type === 'checkbox') A[el.id.slice(3)] = el.checked;
+  else if (el.type === 'number') A[el.id.slice(3)] = Math.max(1, +el.value || 0);
   else A[el.id.slice(3)] = el.value;
   rerender();
 }
 /* ねらいのラジオは name で拾う（id を付けていないため） */
 document.addEventListener('change', (e) => {
   if (e.target.name === 'aw-aim') { awState().aim = e.target.value; rerender(); }
+  if (e.target.name === 'aw-deco') { awState().deco = e.target.value; rerender(); }
 });
 
 /* 貼られた文章を4項目に振り分ける */
