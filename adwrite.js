@@ -101,7 +101,7 @@ function topTitles(c, n = 6) {
 }
 
 const awState = () => (S.aw = S.aw || {
-  caseId: '', age: '', sex: '', attr: '', note: '', aim: 'ctr', media: 'Airワーク', draft: '',
+  kyoten: '', caseId: '', age: '', sex: '', attr: '', note: '', aim: 'ctr', media: 'Airワーク', draft: '',
   deco: 'none', narrow: false, lenOn: false, lenBody: 700, lenWant: 300,
 });
 
@@ -251,10 +251,23 @@ ${tops.map(x => `・${x.title}（CTR ${pct(x.ctr)}・表示${x.imp.toLocaleStrin
 ${briefText(c)}`;
 }
 
+/* 案件は数百件あるので、拠点で絞ってから選ぶ。拠点ごとの件数も出す */
+function awCaseList(kyoten) {
+  return Object.values(S.cases).map(normalizeCase)
+    .filter(x => !kyoten || x.kyoten === kyoten)
+    .sort((a, b) => caseName(a).localeCompare(caseName(b), 'ja'));
+}
+const awLabel = x => `${caseName(x)}｜${x.kyoten || '拠点未設定'}`;
+
 function viewAdWrite() {
   const A = awState();
-  const list = Object.values(S.cases).map(normalizeCase)
-    .sort((a, b) => (b.juchuDate || '').localeCompare(a.juchuDate || ''));
+  const all = Object.values(S.cases).map(normalizeCase);
+  const kyoN = id => all.filter(x => (x.kyoten || '') === id).length;
+  const kyoOpts = cfg().kyotens.map(k => k.id).filter(k => kyoN(k))
+    .map(k => `${k}（${kyoN(k)}件）`);
+  if (kyoN('')) kyoOpts.push(`拠点未設定（${kyoN('')}件）`);
+  const kyoVal = A.kyoten ? kyoOpts.find(o => o.startsWith(A.kyoten + '（')) || '' : '';
+  const list = A.kyoten ? awCaseList(A.kyoten === '拠点未設定' ? '' : A.kyoten) : [];
   const c = A.caseId && S.cases[A.caseId] ? normalizeCase(S.cases[A.caseId]) : null;
 
   const sel = (id, opts, cur, blank) => `<select class="inp" id="${id}">${blank ? `<option value="">${blank}</option>` : ''}${
@@ -282,8 +295,15 @@ function viewAdWrite() {
 
   <div class="panel">
     <h3>1. どの案件の求人を作りますか</h3>
-    <div class="fg"><div class="f"><label for="aw-case">案件</label>
-      ${sel('aw-case', list.map(x => `${caseName(x)}｜${x.kyoten || '拠点未設定'}`), c ? `${caseName(c)}｜${c.kyoten || '拠点未設定'}` : '', '選んでください')}</div>
+    <div class="fg">
+      <div class="f"><label for="aw-kyoten">拠点</label>
+        ${sel('aw-kyoten', kyoOpts, kyoVal, '選んでください')}
+        <small>先に拠点を選ぶと、その拠点の案件だけが下に出ます</small></div>
+      <div class="f"><label for="aw-case">案件</label>
+        ${A.kyoten
+          ? sel('aw-case', list.map(awLabel), c ? awLabel(c) : '', `選んでください（${list.length}件）`)
+          : '<select class="inp" id="aw-case" disabled><option>先に拠点を選んでください</option></select>'}
+        ${A.kyoten ? `<small>${esc(A.kyoten)} の案件 ${list.length}件</small>` : ''}</div>
       <div class="f"><label for="aw-media">媒体</label>${sel('aw-media', Object.keys(MEDIA), A.media)}</div></div>
     ${missing.length ? `<div class="banner warn" style="margin-top:10px">この案件は <b>${missing.map(esc).join('・')}</b> が未入力です。その分、原稿が薄くなります。先に入力しておくと精度が上がります。</div>` : ''}
   </div>
@@ -406,12 +426,14 @@ async function awSave() {
 /* 画面の入力をまとめて受ける。案件名は「名前｜拠点」で表示しているので、選ばれた位置から探す */
 function awChange(el) {
   const A = awState();
-  if (el.id === 'aw-case') {
-    const list = Object.values(S.cases).map(normalizeCase)
-      .sort((a, b) => (b.juchuDate || '').localeCompare(a.juchuDate || ''));
-    const hit = list.find(x => `${caseName(x)}｜${x.kyoten || '拠点未設定'}` === el.value);
+  if (el.id === 'aw-kyoten') {
+    /* 画面には「plus-i（187件）」と出しているので、件数を外して拠点だけにする */
+    A.kyoten = el.value.replace(/（\d+件）$/, '');
+    A.caseId = ''; A.draft = ''; A.fields = null;
+  } else if (el.id === 'aw-case') {
+    const hit = awCaseList(A.kyoten === '拠点未設定' ? '' : A.kyoten).find(x => awLabel(x) === el.value);
     A.caseId = hit ? hit.id : '';
-    A.draft = '';
+    A.draft = ''; A.fields = null;
   } else if (el.id === 'aw-draft') { A.draft = el.value; return; }
   else if (el.type === 'checkbox') A[el.id.slice(3)] = el.checked;
   else if (el.type === 'number') A[el.id.slice(3)] = Math.max(1, +el.value || 0);
