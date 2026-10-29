@@ -334,9 +334,9 @@ function viewAdWrite() {
 
   ${c ? `<div class="panel">
     <h3>6. AIの答えを貼る</h3>
-    <p>AIが出した文章をまるごとここに貼ってください。下の4項目に振り分けます。</p>
+    <p>AIが出した文章をまるごとここに貼ってください。下の${AW_FIELDS.length}項目に振り分けます。</p>
     <textarea id="aw-draft" rows="8" placeholder="AIが出した文章をまるごと貼り付け">${esc(A.draft || (c.jobAd || {}).text || '')}</textarea>
-    <div class="row" style="margin-top:8px"><button class="btn primary" data-act="awsplit">4つに振り分ける</button>
+    <div class="row" style="margin-top:8px"><button class="btn primary" data-act="awsplit">${AW_FIELDS.length}つに振り分ける</button>
       <button class="btn" data-act="awsave">この原稿を案件に保存</button>
       ${(c.jobAd || {}).at ? `<span class="small muted">前回保存：${fmtDT(c.jobAd.at)} ${esc(c.jobAd.by || '')}</span>` : ''}
       <span class="spacer"></span><a class="btn ghost" href="#/doc/${esc(c.id)}/ad">簡易求人票を見る</a></div>
@@ -364,7 +364,7 @@ function fieldBoxHTML(fd, v, M) {
   </div>`;
 }
 
-/* AIの答えを4項目に切り分ける。見出しの表記ゆれ（全角カッコ・■・#）も拾う */
+/* AIの答えを項目ごとに切り分ける。見出しの表記ゆれ（全角カッコ・■・#）も拾う */
 function awSplit(text) {
   const names = { 'タイトル': 'title', '求人キャッチコピー': 'catch', 'キャッチコピー': 'catch', 'キャッチ': 'catch', '求人内容': 'body', '仕事内容': 'body', '求める人材': 'want', '求める人物像': 'want', '職場環境': 'env', '職場の雰囲気': 'env', '職場の環境': 'env' };
   const out = {}; let cur = null, buf = [];
@@ -424,7 +424,7 @@ document.addEventListener('change', (e) => {
   if (e.target.name === 'aw-deco') { awState().deco = e.target.value; rerender(); }
 });
 
-/* 貼られた文章を4項目に振り分ける */
+/* 貼られた文章を項目ごとに振り分ける */
 function awDoSplit() {
   const A = awState(); const text = ($('#aw-draft') || {}).value || '';
   if (!text.trim()) { toast('先にAIの答えを貼ってください', 'warn'); return; }
@@ -434,7 +434,7 @@ function awDoSplit() {
   A.fields = f;
   const miss = AW_FIELDS.filter(x => !f[x.key]).map(x => x.label);
   rerender();
-  toast(miss.length ? `振り分けました。${miss.join('・')}が見つかりません` : '4項目に振り分けました');
+  toast(miss.length ? `振り分けました。${miss.join('・')}が見つかりません` : `${AW_FIELDS.length}項目に振り分けました`);
 }
 
 /* 項目ごとのコピー */
