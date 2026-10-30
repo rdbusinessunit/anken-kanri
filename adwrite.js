@@ -237,6 +237,9 @@ ${M.note}
 - タイトルとキャッチの${AW_VARIANTS}案は、言い回しを変えただけのものにしないこと。
   押す条件を変える（時給／勤務時間／休日／職場の人／未経験可など）、切り口をずらす。
   選ぶ側が迷えるように、別の方向から${AW_VARIANTS}案ください
+- ${AW_VARIANTS}案は番号つきの${AW_VARIANTS}行だけにしてください。
+  「（1=時給／2=未経験…）」のような、どの案が何を狙ったかの説明は書かないこと。
+  前置き・まとめ・感想も不要です。見出しと中身だけを出してください
 ${deco.order ? `
 # 書き方
 ${deco.order}` : ''}${o.narrow ? `
@@ -377,14 +380,25 @@ function viewAdWrite() {
 }
 
 /* 複数案の行から、先頭の番号（1. ／1）／①／・）を外す */
-const stripNo = s => String(s).replace(/^\s*(?:[0-9０-９]{1,2}\s*[.．)）:：、]|[①-⑩]|[-・*])\s*/, '').trim();
+const NUMBERED = /^\s*(?:[0-9０-９]{1,2}\s*[.．)）:：、]|[①-⑩]|[-・*])\s*/;
+const stripNo = s => String(s).replace(NUMBERED, '').trim();
+
+/* 5案だけを取り出す。AIは案のあとに「（1=時給／2=未経験…）」のような
+   説明行を足してくることがあり、それを案として数えてしまうため。
+   番号つきの行があれば、それだけを案とみなす。 */
+function awVariants(v) {
+  const lines = String(v).split('\n').map(x => x.trim()).filter(Boolean);
+  const numbered = lines.filter(x => NUMBERED.test(x));
+  const src = numbered.length ? numbered : lines.filter(x => !/^[（(].*[）)]$/.test(x));
+  return src.map(stripNo).filter(Boolean);
+}
 
 /* 項目ごとの箱。テンプレートが入れ子になりすぎるので関数に出した */
 function fieldBoxHTML(fd, v, M) {
   const max = fd.max(M);
   /* タイトルとキャッチは複数案。1案ずつコピーできないと貼れないので行ごとに分ける */
   if (fd.multi) {
-    const opts = String(v).split('\n').map(stripNo).filter(Boolean);
+    const opts = awVariants(v);
     const rows = opts.map((o, i) => {
       const len = [...o].length;
       const over = max && len > max;
@@ -500,7 +514,7 @@ async function awCopyField(key) {
 /* 複数案のうち1案だけコピーする */
 async function awCopyVariant(key, i) {
   const el = document.querySelector(`[data-awf="${key}"]`); if (!el) return;
-  const opts = String(el.value).split('\n').map(stripNo).filter(Boolean);
+  const opts = awVariants(el.value);
   const v = opts[+i]; if (!v) return;
   const label = (AW_FIELDS.find(x => x.key === key) || {}).label || '';
   try { await navigator.clipboard.writeText(v); toast(`${label}の${+i + 1}案目をコピーしました`); }
