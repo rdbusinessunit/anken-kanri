@@ -55,17 +55,17 @@ const AIMS = {
   },
 };
 
-/* エアワークで使える記号・絵文字。公式のヘルプに載っている一覧から、
-   スラッシュ（／）だけ外してある。公式には使える扱いだが、求人内容に入れると
-   別の記号に置き換わって表示が崩れることを現場で確認したため。
+/* エアワークで使える記号・絵文字。公式のヘルプに載っている一覧そのまま。
    これ以外を入れるとIndeedおよびIndeed PLUS連携サイトで掲載されないことがある。
-   https://faq.rct.airwork.net/hc/ja/articles/23202281853977 */
-const AW_SYMBOLS = `？ ＆ ％ ＄ ・ ー ＝ ＠ （ ） ｛ ｝ ＋ － × ÷ ｜ ＾ ； ： ～ 〇 「 」 ＜ ＞ 【 】 『 』 ［ ］ ＊ ！ ＃ ￥ 漢数字（一 二 三…）
+   https://faq.rct.airwork.net/hc/ja/articles/23202281853977
+   一覧にない文字でいちばん事故が多いのがバックスラッシュ（\\ と ＼）。
+   日本語環境では ￥ として表示されるため、原稿の中で円マークに化けて見える。 */
+const AW_SYMBOLS = `？ ＆ ％ ＄ ・ ー ＝ ＠ （ ） ｛ ｝ ＋ － × ÷ ｜ ＾ ； ： ～ 〇 「 」 ＜ ＞ 【 】 『 』 ［ ］ ＊ ／ ！ ＃ ￥ 漢数字（一 二 三…）
 ❶ ❷ ❸ ➀ ➁ ➂ ➊ ➋ ➌ ※ ▢ ✨ ✅ ☆ ★ ♪ ● ◎ ○ □ ■ ◇ ◆`;
 /* 絵文字として使えるのは実質この2つだけ。装飾オプションの案内にも出す */
 const AW_EMOJI = '✨ ✅';
 /* タイトルはエアワークの「職種名」欄に入れる。職種名だけさらに使えない記号がある */
-const AW_TITLE_NG = '「 」 ＜ ＞ 【 】 『 』 ［ ］ ＊ ！ ＃ ￥ ☆ ★ ♪ ● ◎ ○ □ ■ ◇ ◆';
+const AW_TITLE_NG = '「 」 ＜ ＞ 【 】 『 』 ［ ］ ＊ ／ ！ ＃ ￥ ☆ ★ ♪ ● ◎ ○ □ ■ ◇ ◆';
 
 /* 媒体ごとの決まりごと。字数はエアワーク／求人ボックスの入力欄に合わせる */
 const MEDIA = {
@@ -74,14 +74,13 @@ const MEDIA = {
     symbols: `エアワークは使える記号・絵文字が決まっています。**次の一覧にある文字だけ**を使ってください。
 ${AW_SYMBOLS}
 
-- **＼ … ／ の飾り枠は使わないでください。**（例：＼時給1,600円／ ＼1月末まで／）
-  ＼ は一覧にない文字で、￥ や別の記号に化けます。
-  目立たせたいときは ※ や ★ を行の頭に置いてください
-- **スラッシュ（／ と / ）もどの項目でも使わないでください。**
-  区切りたいときは ｜ か ・ を使ってください
-- 求人内容の改行は、意味のかたまりの区切りだけに入れてください。
-  文の途中で折り返したり、2〜3文字の短い行を続けたりしないこと。
-  一覧に出るときは改行がつめられて、区切り記号のように見えることがあります
+- **バックスラッシュ（\\ と ＼）は絶対に書かないでください。**
+  日本語環境では ￥ として表示されるため、原稿のあちこちが円マークに化けます。
+  ＼時給1,600円／ のような飾り枠も使わないこと（目立たせるなら ※ や ★ を行の頭に）
+- **改行は、実際に改行して書いてください。**
+  \\n や <br> のような「改行を表す文字」を書かないこと。
+  それを書くと、貼り付けたときに ￥n という文字として残ります
+- 出力を \`\`\` で囲んだり、JSONや表の形にしたりしないでください。そのまま貼れる文章で出すこと
 - 一覧にない絵文字（🎶 😊 ❤ ⁉ ❕ 🔰 🚗 など）は使わないこと。掲載されないか、文字化けします
 - 丸囲み数字の ① ② ③ や、㈱ ㊀ ⑴ ⒈ ℃ ㎏ のような組文字・環境依存文字も使えません
   （番号を振るなら ❶ ❷ ❸ か ➀ ➁ ➂ を使ってください）
@@ -387,8 +386,8 @@ function viewAdWrite() {
     <div class="aims" style="margin-bottom:10px">${decoBtns}</div>
     ${M.symbols ? `<p style="margin:0 0 14px;font-size:13px;line-height:1.8;color:var(--ink-3)">
       ${esc(A.media)}は使える記号・絵文字が決まっています（絵文字は <b>${esc(AW_EMOJI)}</b> だけ。① ② ③ や 🎶 😊 は不可）。
-      <b>＼…／ の飾り枠とスラッシュ（／）は使いません</b>（＼ が ￥ などに化けるため。区切りは ｜ か ・）。
-      求人内容の改行も、意味のかたまりごとだけに入れさせています。
+      <b>バックスラッシュ（\ ＼）は書かせません</b>（日本語環境では ￥ として表示されるため）。
+      貼り付けのときにも自動で取り除きます。
       タイトルは「職種名」欄なのでさらに厳しく、<b>☆ ★ ♪ ● ■ ◆ ！ 「」 【】</b> などが使えません。
       その指定はプロンプトに入れてあるので、「絵文字を中心に」を選んでも一覧の外は出てきません。</p>` : ''}
     <label class="awopt"><input type="checkbox" id="aw-narrow"${A.narrow ? ' checked' : ''}>
@@ -481,6 +480,24 @@ function fieldBoxHTML(fd, v, M) {
 }
 
 /* AIの答えを項目ごとに切り分ける。見出しの表記ゆれ（全角カッコ・■・#）も拾う */
+/* AIの答えをそのまま貼ると、改行が \n という2文字のまま残っていることがある。
+   バックスラッシュは日本語環境で ￥ として表示されるので、貼った先で ￥n に化けて見える。
+   振り分ける前にここで直す。何を直したかは呼び出し側で知らせる。 */
+/* 正規表現の中では \ 自身を2つ重ねる。1つだと次の文字をエスケープしてしまう */
+const BS1 = String.fromCharCode(0x5C), BS2 = BS1 + BS1;
+const BSLASH = new RegExp('[' + BS2 + String.fromCharCode(0xFF3C) + ']', 'g');
+function awClean(text) {
+  let s = String(text).replace(/\r\n?/g, '\n');
+  const fixed = [];
+  if (/```/.test(s)) { s = s.replace(/```[a-zA-Z]*\n?/g, ''); fixed.push('コードの囲み'); }
+  if (/<br\s*\/?>/i.test(s)) { s = s.replace(/<br\s*\/?>/gi, '\n'); fixed.push('<br>'); }
+  const esc = new RegExp(BS2 + '[nt]', 'g');
+  if (esc.test(s)) { s = s.replace(esc, m => (m[1] === 'n' ? '\n' : ' ')); fixed.push('文字のままの改行'); }
+  BSLASH.lastIndex = 0;
+  if (BSLASH.test(s)) { s = s.replace(BSLASH, ''); fixed.push('￥に化ける記号'); }
+  return { text: s, fixed };
+}
+
 function awSplit(text) {
   const names = { 'タイトル': 'title', '求人キャッチコピー': 'catch', 'キャッチコピー': 'catch', 'キャッチ': 'catch', '求人内容': 'body', '仕事内容': 'body', '求める人材': 'want', '求める人物像': 'want', '職場環境': 'env', '職場の雰囲気': 'env', '職場の環境': 'env' };
   const out = {}; let cur = null, buf = [];
@@ -546,12 +563,14 @@ document.addEventListener('change', (e) => {
 function awDoSplit() {
   const A = awState(); const text = ($('#aw-draft') || {}).value || '';
   if (!text.trim()) { toast('先にAIの答えを貼ってください', 'warn'); return; }
-  A.draft = text;
-  const f = awSplit(text);
+  const cleaned = awClean(text);
+  A.draft = cleaned.text;
+  const f = awSplit(cleaned.text);
   if (!f) { toast('見出し（【タイトル】など）が見つからず振り分けられませんでした。手で分けてください', 'warn'); return; }
   A.fields = f;
   const miss = AW_FIELDS.filter(x => !f[x.key]).map(x => x.label);
   rerender();
+  if (cleaned.fixed.length) toast(`${cleaned.fixed.join('・')}を直しました`, 'warn');
   toast(miss.length ? `振り分けました。${miss.join('・')}が見つかりません` : `${AW_FIELDS.length}項目に振り分けました`);
 }
 
