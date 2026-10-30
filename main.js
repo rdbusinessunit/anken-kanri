@@ -261,6 +261,7 @@ const ACT = {
   awcopy: () => awCopy(),
   awsplit: () => awDoSplit(),
   awcopyf: (b) => awCopyField(b.dataset.k),
+  awcopyv: (b) => awCopyVariant(b.dataset.k, b.dataset.i),
   awsave: () => awSave(),
   kbnamesave: () => kbNameSave(),
   adsort(b) { S.adf.sort = b.dataset.v; rerender(); },

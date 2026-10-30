@@ -374,6 +374,14 @@ table.list tbody tr.click:hover td{background:var(--accent-soft)}
 .awf.over{border-color:var(--crit);background:color-mix(in srgb,var(--crit) 6%,var(--surface))}
 .awf b{font-size:15.5px;color:var(--ink)}
 .awf .ngc{color:var(--crit);font-weight:700}
+.awopt-row{display:grid;grid-template-columns:26px 1fr auto auto;gap:10px;align-items:center;padding:8px 10px;margin-top:6px;
+  border:1px solid var(--line);border-radius:8px;background:var(--surface)}
+.awopt-row:hover{border-color:var(--accent)}
+.awopt-row.over{border-color:var(--crit);background:color-mix(in srgb,var(--crit) 7%,var(--surface))}
+.awopt-row .no{width:22px;height:22px;border-radius:50%;background:var(--accent-soft);color:var(--accent);
+  font-size:12px;font-weight:700;display:grid;place-items:center}
+.awopt-row .txt{font-size:15px;line-height:1.6;color:var(--ink);word-break:break-word}
+@media(max-width:620px){.awopt-row{grid-template-columns:26px 1fr;row-gap:6px}.awopt-row .small,.awopt-row .btn{grid-column:2}}
 .awf textarea{width:100%;margin-top:8px;padding:9px 11px;border:1px solid var(--line);border-radius:8px;
   background:var(--surface);font-size:15px;line-height:1.8;color:var(--ink)}
 pre.prompt{margin:10px 0 0;padding:14px 16px;background:var(--surface-2,#F3F6F4);border:1px solid var(--line);border-radius:9px;
@@ -528,7 +536,7 @@ try { var t0 = localStorage.getItem('bring-theme') || 'light'; if (t0 === 'light
 /* 画面の更新が利用者に届くようにする仕組み
    ・JavaScriptは5分ごとに新しいものを取りにいく
    ・version.json の版番号がこのページより新しければ、自動で読み直す */
-const APP_VERSION = "202610291650";
+const APP_VERSION = "202610301000";
 (function () {
   var files = ["config.js","ref.js","core.js","caseview.js","docs.js","postings.js","ads.js","adwrite.js","xlsxfill.js","main.js"];
   var q = "?v=" + Math.floor(Date.now() / 300000);

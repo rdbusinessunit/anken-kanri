@@ -63,10 +63,14 @@ const MEDIA = {
     note: '- 検索で使われる言葉（職種名・地名・こだわり条件）をタイトルに入れる' },
 };
 
-/* 実際に編集するのはこの5つだけ。給与や勤務時間は媒体側の入力欄で設定するので原稿には書かせない */
+/* タイトルとキャッチは何案出させるか。短くて効きが大きいので、選べるようにする */
+const AW_VARIANTS = 5;
+
+/* 実際に編集するのはこの5つだけ。給与や勤務時間は媒体側の入力欄で設定するので原稿には書かせない。
+   multi が付いた項目は複数案を出させて、1案ずつコピーできるようにする */
 const AW_FIELDS = [
-  { key: 'title', label: 'タイトル', max: m => m.titleMax },
-  { key: 'catch', label: '求人キャッチコピー', max: m => m.catchMax },
+  { key: 'title', label: 'タイトル', max: m => m.titleMax, multi: true },
+  { key: 'catch', label: '求人キャッチコピー', max: m => m.catchMax, multi: true },
   { key: 'body', label: '求人内容', max: () => 0, len: o => o.lenBody },
   { key: 'want', label: '求める人材', max: () => 0, len: o => o.lenWant },
   { key: 'env', label: '職場環境', max: () => 0 },
@@ -211,10 +215,10 @@ ${aim.order}
 次の5つだけを、この見出しのまま、この順で出力してください。ほかの項目は書かないでください。
 
 【タイトル】
-（全角${M.titleMax}字以内）
+（全角${M.titleMax}字以内。${AW_VARIANTS}案を「1. 」から始まる番号つきで1行ずつ）
 
 【求人キャッチコピー】
-（全角${M.catchMax}字以内）
+（全角${M.catchMax}字以内。${AW_VARIANTS}案を「1. 」から始まる番号つきで1行ずつ）
 
 【求人内容】
 ${o.lenOn ? `（全角${o.lenBody}字ちょうどを目指す。前後20字までのずれは可）` : ''}
@@ -230,6 +234,9 @@ ${M.note}
 - 案件データにない条件（時給・手当・休日・待遇）は絶対に作らないこと
 - 「アットホームな職場」「やりがい」のような、どの求人にも書ける言葉は使わない
 - 字数は必ず守ること。超えたら削って収める
+- タイトルとキャッチの${AW_VARIANTS}案は、言い回しを変えただけのものにしないこと。
+  押す条件を変える（時給／勤務時間／休日／職場の人／未経験可など）、切り口をずらす。
+  選ぶ側が迷えるように、別の方向から${AW_VARIANTS}案ください
 ${deco.order ? `
 # 書き方
 ${deco.order}` : ''}${o.narrow ? `
@@ -369,9 +376,32 @@ function viewAdWrite() {
   </div>` : ''}` : ''}`;
 }
 
+/* 複数案の行から、先頭の番号（1. ／1）／①／・）を外す */
+const stripNo = s => String(s).replace(/^\s*(?:[0-9０-９]{1,2}\s*[.．)）:：、]|[①-⑩]|[-・*])\s*/, '').trim();
+
 /* 項目ごとの箱。テンプレートが入れ子になりすぎるので関数に出した */
 function fieldBoxHTML(fd, v, M) {
   const max = fd.max(M);
+  /* タイトルとキャッチは複数案。1案ずつコピーできないと貼れないので行ごとに分ける */
+  if (fd.multi) {
+    const opts = String(v).split('\n').map(stripNo).filter(Boolean);
+    const rows = opts.map((o, i) => {
+      const len = [...o].length;
+      const over = max && len > max;
+      return `<div class="awopt-row${over ? ' over' : ''}">
+        <span class="no">${i + 1}</span>
+        <span class="txt">${esc(o)}</span>
+        <span class="small ${over ? 'ngc' : 'muted'}">${len}${max ? `/${max}` : ''}字</span>
+        <button class="btn sm" data-act="awcopyv" data-k="${fd.key}" data-i="${i}">コピー</button>
+      </div>`;
+    }).join('');
+    return `<div class="awf">
+      <div class="row"><b>${esc(fd.label)}</b>
+        <span class="small muted">${opts.length}案${max ? `　上限 ${max}字` : ''}</span></div>
+      ${opts.length ? rows : '<p class="small muted" style="margin:6px 0 0">見つかりませんでした。下の欄に手で入れてください。</p>'}
+      <textarea data-awf="${fd.key}" rows="${Math.max(2, opts.length)}">${esc(v)}</textarea>
+    </div>`;
+  }
   const len = [...v].length;
   const over = max && len > max;
   const rows = fd.key === 'body' ? 10 : fd.key === 'want' ? 5 : 2;
@@ -465,4 +495,14 @@ async function awCopyField(key) {
   const label = (AW_FIELDS.find(x => x.key === key) || {}).label || '';
   try { await navigator.clipboard.writeText(el.value); toast(`${label}をコピーしました`); }
   catch (e) { el.select(); toast('自動コピーができませんでした。Ctrl+C を押してください', 'warn'); }
+}
+
+/* 複数案のうち1案だけコピーする */
+async function awCopyVariant(key, i) {
+  const el = document.querySelector(`[data-awf="${key}"]`); if (!el) return;
+  const opts = String(el.value).split('\n').map(stripNo).filter(Boolean);
+  const v = opts[+i]; if (!v) return;
+  const label = (AW_FIELDS.find(x => x.key === key) || {}).label || '';
+  try { await navigator.clipboard.writeText(v); toast(`${label}の${+i + 1}案目をコピーしました`); }
+  catch (e) { toast('自動コピーができませんでした。文字を選んで Ctrl+C を押してください', 'warn'); }
 }
