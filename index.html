@@ -354,6 +354,13 @@ table.list tbody tr.click:hover td{background:var(--accent-soft)}
 .lastrun.ng{border-left-color:var(--crit)}
 .lastrun.ng b{color:var(--crit)}
 /* 求人作成 */
+/* 求人作成の画面。パネルに余白がないと文字が枠に密着して読みにくい */
+.awpage .panel{padding:18px 22px;margin-bottom:16px}
+.awpage .panel h3{margin:0 0 6px}
+.awpage .panel > p{margin:0 0 12px;color:var(--ink-3);font-size:14.5px;line-height:1.8}
+.awpage textarea{width:100%;padding:11px 13px;border:1px solid var(--line);border-radius:8px;
+  background:var(--surface);font-size:15px;line-height:1.85;color:var(--ink);box-sizing:border-box}
+.awpage textarea:focus{outline:2px solid var(--accent);outline-offset:-1px}
 .aims{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:10px}
 .aim{display:grid;gap:3px;padding:13px 15px;border:2px solid var(--line);border-radius:10px;cursor:pointer;background:var(--surface)}
 .aim:hover{border-color:var(--accent)}
@@ -536,7 +543,7 @@ try { var t0 = localStorage.getItem('bring-theme') || 'light'; if (t0 === 'light
 /* 画面の更新が利用者に届くようにする仕組み
    ・JavaScriptは5分ごとに新しいものを取りにいく
    ・version.json の版番号がこのページより新しければ、自動で読み直す */
-const APP_VERSION = "202610301027";
+const APP_VERSION = "202610301040";
 (function () {
   var files = ["config.js","ref.js","core.js","caseview.js","docs.js","postings.js","ads.js","adwrite.js","xlsxfill.js","main.js"];
   var q = "?v=" + Math.floor(Date.now() / 300000);

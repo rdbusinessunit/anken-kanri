@@ -300,7 +300,8 @@ function viewAdWrite() {
     !KENGAKU.some(q => filled(c.kengaku[q[1]])) && '見学メモ（現場実態）',
   ].filter(Boolean) : [];
 
-  return `<div class="pagehead"><div><div class="eyebrow">AD WRITING</div><h1>求人作成</h1></div>
+  return `<div class="awpage">
+  <div class="pagehead"><div><div class="eyebrow">AD WRITING</div><h1>求人作成</h1></div>
     <span class="sub">案件の情報からAIへの指示文を組み立てます</span></div>
 
   <div class="panel">
@@ -376,7 +377,8 @@ function viewAdWrite() {
     <h3>7. 1項目ずつコピーしてエアワークに貼る</h3>
     <p>上限を超えている項目は赤くなります。</p>
     ${AW_FIELDS.map(fd => fieldBoxHTML(fd, fields[fd.key] || '', M)).join('')}
-  </div>` : ''}` : ''}`;
+  </div>` : ''}` : ''}
+  </div>`;
 }
 
 /* 複数案の行から、先頭の番号（1. ／1）／①／・）を外す */
