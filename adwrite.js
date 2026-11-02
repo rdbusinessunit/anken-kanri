@@ -55,6 +55,48 @@ const AIMS = {
   },
 };
 
+/* 同じ案件から、押す軸を変えて何本も作るためのスイッチ。
+   ねらい（AIMS）が「何を増やしたいか」なのに対して、こちらは「何で引くか」。
+   軸ごとに、見学メモのどの項目を使うかまで指定する。
+   項目名を書いておかないと、AIは案件データの頭のほうだけ拾って一般論を書く。 */
+const ANGLES = {
+  none: { label: '指定しない', hint: '案件のいちばん強いところで書きます', order: '' },
+  life: {
+    label: 'プライベート重視', hint: '休日・終業時間・残業の少なさで引きます',
+    order: `仕事が終わったあとと、休みの日の暮らしが浮かぶように書いてください。
+- 休日、年間休日、終業時間、残業時間を前に出す
+- 「何時に帰れるから何ができるか」まで書く。時刻を書くだけで終わらせない
+- 見学メモの「昼休憩は外に出られるか」「休憩はみんなどうしているか」「食堂」も使う
+- 残業が多い案件で「残業なし」と書かない。多いなら、その分の月収で引くこと`,
+  },
+  work: {
+    label: '仕事内容重視', hint: '作業の中身そのもので引きます',
+    order: `何を作っていて、1日何をするのかを具体的に書いてください。
+- 案件データの「完成品・用途」「作業内容」を必ず使う。自分が作るものが分かると応募が増える
+- 見学メモの「ライン作業かどうか」「早いか遅いか」「一ヵ所で動かないのか、動きはあるのか」
+  「作業姿勢」「音」「臭い」を使って、作業中の体感が分かるように書く
+- 「カンタンな軽作業」で済ませないこと。何がどうカンタンなのかを書く`,
+  },
+  career: {
+    label: 'キャリアアップ重視', hint: '転籍・資格・交替入りで引きます',
+    order: `この仕事がどこにつながるのかを書いてください。
+- 見学メモの「転籍実績はあるのか」「どんな人が転籍するのか」「転籍者の年齢・性別」を使う
+- 「交替に入るまでの日勤の期間」があれば、日勤から交替に上がって収入が増える道筋として書く
+- 必要な資格、身につく作業、任される範囲の広がりを具体的に書く
+- 転籍実績が「無」の案件では、正社員登用を匂わせないこと。
+  その場合は身につく技術と任される範囲で書く`,
+  },
+  train: {
+    label: '研修重視', hint: '未経験でも覚えられることで引きます',
+    order: `未経験の人が「これなら覚えられる」と思えるように書いてください。
+- 見学メモの「教育期間、習熟期間」「誰に教わるのか」「マンツーマンで教わるのか、少し教えて放置か」
+  「教育の方法」を必ず使う。ここが研修重視の原稿の中身です
+- 「bringメンバーの人数」があれば、一人で放り込まれるわけではないことの裏づけに使う
+- 「人間関係」「男女比」も、聞きやすい雰囲気かどうかの材料として使う
+- 「未経験歓迎」とだけ書かないこと。誰が何日かけてどう教えるのかを書く`,
+  },
+};
+
 /* エアワークで使える記号・絵文字。公式のヘルプに載っている一覧そのまま。
    これ以外を入れるとIndeedおよびIndeed PLUS連携サイトで掲載されないことがある。
    https://faq.rct.airwork.net/hc/ja/articles/23202281853977
@@ -144,7 +186,8 @@ function topTitles(c, n = 6) {
 }
 
 const awState = () => (S.aw = S.aw || {
-  kyoten: '', caseId: '', age: '', sex: '', attr: '', note: '', aim: 'ctr', media: 'Airワーク', draft: '',
+  kyoten: '', caseId: '', age: '', sex: '', attr: '', note: '', aim: 'ctr', angle: 'none',
+  media: 'Airワーク', draft: '',
   deco: 'none', narrow: false, lenOn: false, lenBody: 700, lenWant: 300,
 });
 
@@ -233,6 +276,7 @@ function briefText(c) {
 
 function buildPrompt(c, o) {
   const aim = AIMS[o.aim] || AIMS.ctr;
+  const ang = ANGLES[o.angle] || ANGLES.none;
   const persona = [o.age, o.sex, o.attr].filter(x => x && x !== '年代は問わない' && x !== '男女問わず' && x !== '問わない');
   const prev = o.aim === 'repost' && c.jobAd && c.jobAd.text ? c.jobAd.text : '';
   const M = MEDIA[o.media] || MEDIA['Airワーク'];
@@ -249,7 +293,12 @@ ${persona.length ? persona.join('・') : '特定の層にしぼらない'}${o.no
 ${aim.label}
 
 ${aim.order}
+${ang.order ? `
+# 押す軸：${ang.label}
+原稿全体をこの軸で通してください。タイトルもキャッチも本文も、ここを中心にします。
 
+${ang.order}
+` : ''}
 # 出力の形（ここが大事です）
 次の5つだけを、この見出しのまま、この順で出力してください。ほかの項目は書かないでください。
 
@@ -274,7 +323,10 @@ ${M.note}
 - 「アットホームな職場」「やりがい」のような、どの求人にも書ける言葉は使わない
 - 字数は必ず守ること。超えたら削って収める
 - タイトルとキャッチの${AW_VARIANTS}案は、言い回しを変えただけのものにしないこと。
-  押す条件を変える（時給・勤務時間・休日・職場の人・未経験可など）、切り口をずらす。
+  ${ang.order
+    ? `${AW_VARIANTS}案とも「${ang.label}」の軸は外さず、その中で切り口をずらしてください。
+  軸は同じでも、推す事実を変える・語りかける相手を変える・言い切り方を変える、で別物にできます`
+    : '押す条件を変える（時給・勤務時間・休日・職場の人・未経験可など）、切り口をずらす。'}
   選ぶ側が迷えるように、別の方向から${AW_VARIANTS}案ください
 - ${AW_VARIANTS}案は番号つきの${AW_VARIANTS}行だけにしてください。
   「（1=時給、2=未経験…）」のような、どの案が何を狙ったかの説明は書かないこと。
@@ -330,6 +382,10 @@ function viewAdWrite() {
     `<label class="aim${A.aim === k ? ' on' : ''}"><input type="radio" name="aw-aim" value="${k}"${A.aim === k ? ' checked' : ''}>
       <b>${esc(v.label)}</b><span>${esc(v.hint)}</span></label>`).join('');
 
+  const angBtns = Object.entries(ANGLES).map(([k, v]) =>
+    `<label class="aim${A.angle === k ? ' on' : ''}"><input type="radio" name="aw-angle" value="${k}"${A.angle === k ? ' checked' : ''}>
+      <b>${esc(v.label)}</b><span>${esc(v.hint)}</span></label>`).join('');
+
   const decoBtns = Object.entries(DECOS).map(([k, v]) =>
     `<label class="aim${A.deco === k ? ' on' : ''}"><input type="radio" name="aw-deco" value="${k}"${A.deco === k ? ' checked' : ''}>
       <b>${esc(v.label)}</b><span>${esc(v.hint)}</span></label>`).join('');
@@ -381,7 +437,23 @@ function viewAdWrite() {
   </div>
 
   <div class="panel">
-    <h3>4. 書き方（任意）</h3>
+    <h3>4. 求人のバリエーション</h3>
+    <p>同じ案件でも、押す軸を変えると別の求人になります。1案件から何本も出したいときに切り替えてください。</p>
+    <div class="aims">${angBtns}</div>
+    ${c && A.angle !== 'none' ? (() => {
+      /* 軸に使う見学メモが空だと、その軸では書きようがない。先に言う */
+      const need = { life: ['q33', 'q30', 'q28'], work: ['q20', 'q21', 'q07'], career: ['q36', 'q37', 'q25'], train: ['q09', 'q10', 'q11', 'q24'] }[A.angle] || [];
+      const miss = need.filter(q => !filled(c.kengaku[q]))
+        .map(q => (KENGAKU.find(x => x[1] === q) || [])[2]).filter(Boolean);
+      return miss.length
+        ? `<div class="banner warn" style="margin-top:12px">この軸で使う見学メモ <b>${miss.map(esc).join('・')}</b> が未入力です。
+             その分、この軸の原稿は薄くなります。</div>`
+        : '';
+    })() : ''}
+  </div>
+
+  <div class="panel">
+    <h3>5. 書き方（任意）</h3>
     <p>決めなくても作れます。見た目の好みや、媒体の都合に合わせたいときだけ使ってください。</p>
     <div class="aims" style="margin-bottom:10px">${decoBtns}</div>
     ${M.symbols ? `<p style="margin:0 0 14px;font-size:13px;line-height:1.8;color:var(--ink-3)">
@@ -404,7 +476,7 @@ function viewAdWrite() {
   </div>
 
   <div class="panel">
-    <div class="row"><h3 style="margin:0">5. この文章をAIに貼ってください</h3><span class="spacer"></span>
+    <div class="row"><h3 style="margin:0">6. この文章をAIに貼ってください</h3><span class="spacer"></span>
       <button class="btn primary" data-act="awcopy"${c ? '' : ' disabled'}>プロンプトをコピー</button></div>
     ${c ? `<p>ジェンスパーク・Claude・ChatGPTなど、お使いのAIの入力欄に貼り付けてください。</p>
       <pre class="prompt" id="aw-prompt">${esc(prompt)}</pre>
@@ -413,7 +485,7 @@ function viewAdWrite() {
   </div>
 
   ${c ? `<div class="panel">
-    <h3>6. AIの答えを貼る</h3>
+    <h3>7. AIの答えを貼る</h3>
     <p>AIが出した文章をまるごとここに貼ってください。下の${AW_FIELDS.length}項目に振り分けます。</p>
     <textarea id="aw-draft" rows="8" placeholder="AIが出した文章をまるごと貼り付け">${esc(A.draft || (c.jobAd || {}).text || '')}</textarea>
     <div class="row" style="margin-top:8px"><button class="btn primary" data-act="awsplit">${AW_FIELDS.length}つに振り分ける</button>
@@ -423,7 +495,7 @@ function viewAdWrite() {
   </div>
 
   ${fields ? `<div class="panel">
-    <h3>7. 1項目ずつコピーしてエアワークに貼る</h3>
+    <h3>8. 1項目ずつコピーしてエアワークに貼る</h3>
     <p>上限を超えている項目は赤くなります。</p>
     ${AW_FIELDS.map(fd => fieldBoxHTML(fd, fields[fd.key] || '', M)).join('')}
   </div>` : ''}` : ''}
@@ -556,6 +628,7 @@ function awChange(el) {
 /* ねらいのラジオは name で拾う（id を付けていないため） */
 document.addEventListener('change', (e) => {
   if (e.target.name === 'aw-aim') { awState().aim = e.target.value; rerender(); }
+  if (e.target.name === 'aw-angle') { awState().angle = e.target.value; rerender(); }
   if (e.target.name === 'aw-deco') { awState().deco = e.target.value; rerender(); }
 });
 
