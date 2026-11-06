@@ -277,6 +277,7 @@ function viewAds() {
   const docs = adDocs();
   const current = docs.length ? `<table class="list" style="margin-top:10px"><thead><tr><th>媒体</th><th>拠点</th><th>元ファイル</th><th>期間</th><th style="text-align:right">公開中の求人</th><th>取込</th></tr></thead><tbody>${docs.map(d => `<tr><td>${mtag(d.media)}</td><td>${esc(d.kyoten || '全拠点')}</td><td class="small">${esc((d.sources || [d.source]).filter(Boolean).join(' ＋ '))}</td><td class="small">${esc(d.period || '')}</td><td class="n" style="text-align:right">${d.media === 'Indeed' ? d.tot.n : sum(Object.values(d.byKyoten || {}).map(v => v.n))}</td><td class="small muted">${fmtDT(d.importedAt)} ${esc(d.importedBy || '')}</td></tr>`).join('')}</tbody></table>` : '<p class="small muted" style="margin:8px 0 0">まだ取り込まれていません。</p>';
   return `<div class="pagehead"><div><div class="eyebrow">AD DATA</div><h1>求人広告の取込</h1></div><span class="sub">Indeed・求人ボックスの求人数と実績を案件別にまとめます</span><span class="spacer"></span><a class="btn ghost" href="#/postings">← 求人管理</a></div>
+    ${jobSubnav('ads')}
   <div class="panel" style="padding:16px 18px;margin-bottom:18px">
     <div class="row"><button class="btn primary" data-act="impfeed"${I.busy ? ' disabled' : ''}>成績ボードの取り込みを読み込む</button><label class="btn ghost" for="adsin" tabindex="0">CSVファイルを選ぶ</label><input type="file" id="adsin" accept=".csv,text/csv" multiple hidden><span class="small muted">${I.busy ? esc(I.busy) : '成績ボードでCSVを取り込んでいれば、ファイルを選び直さずにそのまま使えます。'}</span></div>
     <ul class="small muted" style="margin:10px 0 0;padding-left:18px;line-height:1.8">

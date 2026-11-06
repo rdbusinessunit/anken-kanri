@@ -402,6 +402,7 @@ function viewAdWrite() {
   return `<div class="awpage">
   <div class="pagehead"><div><div class="eyebrow">AD WRITING</div><h1>求人作成</h1></div>
     <span class="sub">案件の情報からAIへの指示文を組み立てます</span></div>
+    ${jobSubnav('write')}
 
   <div class="panel">
     <h3>1. どの案件の求人を作りますか</h3>

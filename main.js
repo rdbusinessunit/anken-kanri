@@ -15,7 +15,10 @@ function keepDraftIfLeaving(r) {
 }
 function render() {
   const r = parseRoute(); keepDraftIfLeaving(r);
-  const nav = r.view === 'case' || r.view === 'doc' ? 'cases' : r.view === 'ads' ? 'postings' : r.view;
+  /* 上のタブは4つしかない。新規受注と案件詳細は「案件一覧」、
+     求人作成と広告の取込は「求人管理」のところを光らせる */
+  const NAV_OF = { case: 'cases', doc: 'cases', new: 'cases', ads: 'postings', write: 'postings' };
+  const nav = NAV_OF[r.view] || r.view;
   $$('[data-nav]').forEach(a => a.dataset.nav === nav ? a.setAttribute('aria-current', 'page') : a.removeAttribute('aria-current'));
   const v = $('#view');
   if (!S.loaded) { v.innerHTML = '<div class="empty">データを読み込んでいます…</div>'; return; }

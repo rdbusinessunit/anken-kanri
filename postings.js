@@ -12,6 +12,11 @@ function sparkSVG(byMonth) {
   const W = 22 * ms.length, Hh = 46;
   return `<svg class="spark" viewBox="0 0 ${W} ${Hh + 14}" width="${W}" height="${Hh + 14}" role="img" aria-label="月別応募数">${vals.map((v, i) => { const h = Math.round(v / max * Hh); return `<rect x="${i * 22 + 3}" y="${Hh - h}" width="16" height="${Math.max(h, v ? 2 : 0)}" fill="currentColor" opacity="${i === vals.length - 1 ? 1 : .55}" rx="1"></rect><text x="${i * 22 + 11}" y="${Hh + 11}" text-anchor="middle">${+ms[i].slice(5)}月</text>${v ? `<text x="${i * 22 + 11}" y="${Hh - h - 3}" text-anchor="middle">${v}</text>` : ''}`; }).join('')}</svg>`;
 }
+/* 求人まわりの3画面は行き来が多い。上のタブを増やすと幅が足りなくなるので、
+   ページの中で切り替えられるようにする。ads.js・adwrite.js からも使う */
+const JOB_SUBNAV = [['postings', '#/postings', '掲載の一覧'], ['write', '#/write', '求人作成'], ['ads', '#/ads', '広告の取込']];
+const jobSubnav = cur => `<nav class="subnav">${JOB_SUBNAV.map(([k, h, l]) =>
+  `<a href="${h}"${k === cur ? ' aria-current="page"' : ''}>${esc(l)}</a>`).join('')}</nav>`;
 function viewPostings() {
   const C = cfg(), media = mediaCols(), pk = S.pk;
   const q = new URLSearchParams(location.hash.split('?')[1] || ''); if (q.get('case') && S.open !== q.get('case') && !S._openedFromQuery) { S.open = q.get('case'); S._openedFromQuery = true; }
@@ -93,7 +98,9 @@ function viewPostings() {
   const unreg = unregisteredNames();
   return `<div class="pagehead"><div><div class="eyebrow">JOB POSTINGS</div><h1>求人管理</h1></div><span class="sub">どの拠点で・どの案件が・どの媒体に何件出ているか</span><span class="spacer"></span>
     <a class="btn primary" href="#/ads">求人広告CSVを取り込む</a>
-    <div class="seg-f" role="group" aria-label="拠点"><button data-act="pk" data-v="" aria-pressed="${!pk}">全拠点</button>${C.kyotens.map(k => `<button data-act="pk" data-v="${esc(k.id)}" aria-pressed="${pk === k.id}">${esc(k.id)}</button>`).join('')}</div></div>
+    </div>
+    ${jobSubnav('postings')}
+    <div class="row" style="margin:0 0 16px"><div class="seg-f" role="group" aria-label="拠点"><button data-act="pk" data-v="" aria-pressed="${!pk}">全拠点</button>${C.kyotens.map(k => `<button data-act="pk" data-v="${esc(k.id)}" aria-pressed="${pk === k.id}">${esc(k.id)}</button>`).join('')}</div></div>
     ${!docs.length ? `<div class="banner info">Indeedや求人ボックスのCSVを取り込むと、媒体別の求人数と実績が自動で入ります。<a href="#/ads">取り込む</a></div>` : ''}
     ${tiles}
     ${matrix ? `<h2 style="font-size:17px;margin:0 0 8px">拠点×媒体の求人数</h2>${matrix}<p class="small muted">「○案件」は同じ現場をまとめた数。${adDocs().some(d => d.media === '求人BOX' && Object.keys(d.byKyoten || {}).some(isUnk)) ? '求人ボックスの「（未区分）」は勤務先名・電話番号・同名のIndeed案件のどれでも拠点が決まらなかった求人です（取込画面で拠点を付けられます）。' : ''}</p>` : ''}
