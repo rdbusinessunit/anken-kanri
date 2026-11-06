@@ -79,34 +79,6 @@ const ANGLES = {
   「作業姿勢」「音」「臭い」を使って、作業中の体感が分かるように書く
 - 「カンタンな軽作業」で済ませないこと。何がどうカンタンなのかを書く`,
   },
-  product: {
-    label: '製造品の説明', hint: '何を作っている工場かで引きます',
-    data: [
-      ['完成品・用途', c => c.positions.some(p => filled(p.product))],
-      ['生産品目', c => filled(c.company.products)],
-      ['企業の説明', c => filled(c.company.description)],
-    ],
-    order: `その工場が何を作っているのかを、読む人が思い浮かべられるように書いてください。
-- 案件データの「企業の説明」「業種」「生産品目」と、職種の「完成品・用途」を必ず使う
-- 部品なら、それが最後に何になるのかまで書く（例：この部品は、家の窓枠になります）
-- 身近で目にするもの、名前を知っている製品につながるなら、それを出す。
-  自分の作ったものがどこにあるか分かることは、工場で働く理由になります
-- 大きさ・重さ・1日に何個つくるかなど、数字で手ざわりが分かるように書く
-- 案件データに書いていない事業・取引先・納入先を、推測で足さないこと`,
-  },
-  process: {
-    label: '工程の説明', hint: '担当する工程と1日の流れで引きます',
-    memo: ['q20', 'q21', 'q07'],
-    data: [['作業内容', c => c.positions.some(p => filled(p.task))]],
-    order: `募集している工程が、ものづくりのどこにあたるのかを書いてください。
-- 職種の「作業内容」を起点に、前の工程から何が流れてきて、自分が何をして、
-  次にどこへ渡すのかを順に書く
-- 見学メモの「ライン作業かどうか」「早いか遅いか」「一ヵ所で動かないのか、動きはあるのか」を使い、
-  ラインの速さで進むのか、自分のペースで進むのかをはっきりさせる
-- 1日の流れ（始業→午前→休憩→午後→終業）が分かるように書く。
-  ただし案件データから分かる範囲までにして、工程を想像で足さないこと
-- 「特有の難しさ」があれば隠さずに書く。そのうえで、どう慣れていくのかを続けて書く`,
-  },
   career: {
     label: 'キャリアアップ重視', hint: '転籍・資格・交替入りで引きます',
     memo: ['q36', 'q37', 'q25'],
@@ -128,6 +100,44 @@ const ANGLES = {
 - 「未経験歓迎」とだけ書かないこと。誰が何日かけてどう教えるのかを書く`,
   },
 };
+
+/* 軸（ANGLES）とは別に、どの軸と組み合わせても足せる説明。
+   軸は1つしか選べないが、こちらは必要なものだけONにできる。
+   キーは状態のキーそのもの。チェックボックスの id を aw-<キー> にすると、
+   共通の change ハンドラがそのまま拾ってくれる */
+const EXTRAS = {
+  exProduct: {
+    label: '製造品の説明を入れる', hint: '何を作っている工場なのかを必ず書かせます',
+    data: [
+      ['完成品・用途', c => c.positions.some(p => filled(p.product))],
+      ['生産品目', c => filled(c.company.products)],
+      ['企業の説明', c => filled(c.company.description)],
+    ],
+    order: `【製造品の説明】その工場が何を作っているのかを、読む人が思い浮かべられるように書いてください。
+- 案件データの「企業の説明」「業種」「生産品目」と、職種の「完成品・用途」を必ず使う
+- 部品なら、それが最後に何になるのかまで書く（例：この部品は、家の窓枠になります）
+- 身近で目にするもの、名前を知っている製品につながるなら、それを出す。
+  自分の作ったものがどこにあるか分かることは、工場で働く理由になります
+- 大きさ・重さ・1日に何個つくるかなど、数字で手ざわりが分かるように書く
+- 案件データに書いていない事業・取引先・納入先を、推測で足さないこと`,
+  },
+  exProcess: {
+    label: '工程の説明を入れる', hint: '担当する工程と1日の流れを必ず書かせます',
+    memo: ['q20', 'q21', 'q07'],
+    data: [['作業内容', c => c.positions.some(p => filled(p.task))]],
+    order: `【工程の説明】募集している工程が、ものづくりのどこにあたるのかを書いてください。
+- 職種の「作業内容」を起点に、前の工程から何が流れてきて、自分が何をして、
+  次にどこへ渡すのかを順に書く
+- 見学メモの「ライン作業かどうか」「早いか遅いか」「一ヵ所で動かないのか、動きはあるのか」を使い、
+  ラインの速さで進むのか、自分のペースで進むのかをはっきりさせる
+- 1日の流れ（始業→午前→休憩→午後→終業）が分かるように書く。
+  ただし案件データから分かる範囲までにして、工程を想像で足さないこと
+- 「特有の難しさ」があれば隠さずに書く。そのうえで、どう慣れていくのかを続けて書く`,
+  },
+};
+
+/* オプションを2つONにしたとき、プロンプトの中で1行あけて並べるための区切り */
+const EX_SEP = '\n\n';
 
 /* エアワークで使える記号・絵文字。公式のヘルプに載っている一覧そのまま。
    これ以外を入れるとIndeedおよびIndeed PLUS連携サイトで掲載されないことがある。
@@ -220,6 +230,7 @@ function topTitles(c, n = 6) {
 const awState = () => (S.aw = S.aw || {
   kyoten: '', caseId: '', age: '', sex: '', attr: '', note: '', aim: 'ctr', angle: 'none',
   media: 'Airワーク', draft: '',
+  exProduct: false, exProcess: false,
   deco: 'none', narrow: false, lenOn: false, lenBody: 700, lenWant: 300,
 });
 
@@ -312,6 +323,8 @@ function briefText(c) {
 function buildPrompt(c, o) {
   const aim = AIMS[o.aim] || AIMS.ctr;
   const ang = ANGLES[o.angle] || ANGLES.none;
+  /* ONにされたオプション。軸と違って何個でも足せる */
+  const exOn = Object.entries(EXTRAS).filter(([k]) => o[k]).map(([, v]) => v);
   const persona = [o.age, o.sex, o.attr].filter(x => x && x !== '年代は問わない' && x !== '男女問わず' && x !== '問わない');
   const prev = o.aim === 'repost' && c.jobAd && c.jobAd.text ? c.jobAd.text : '';
   const M = MEDIA[o.media] || MEDIA['Airワーク'];
@@ -333,6 +346,12 @@ ${ang.order ? `
 原稿全体をこの軸で通してください。タイトルもキャッチも本文も、ここを中心にします。
 
 ${ang.order}
+` : ''}${exOn.length ? `
+# 必ず入れる説明
+押す軸とは別に、次の説明を【求人内容】のなかに必ず入れてください。
+字数の指定があるときは、ほかを削ってでもこの説明を入れ、指定の字数に収めること。
+
+${exOn.map(x => x.order).join(EX_SEP)}
 ` : ''}
 # 出力の形（ここが大事です）
 次の5つだけを、この見出しのまま、この順で出力してください。ほかの項目は書かないでください。
@@ -476,18 +495,21 @@ function viewAdWrite() {
     <h3>4. 求人のバリエーション</h3>
     <p>同じ案件でも、押す軸を変えると別の求人になります。1案件から何本も出したいときに切り替えてください。</p>
     <div class="aims">${angBtns}</div>
-    ${c && A.angle !== 'none' ? (() => {
-      /* 軸に使う材料が空だと、その軸では書きようがない。先に言う。
+    <p style="margin:18px 0 8px;font-size:14px;color:var(--ink-2)"><b>どの軸にも足せる説明</b>　軸とは別に、必要なものだけONにしてください</p>
+    ${Object.entries(EXTRAS).map(([k, v]) => `<label class="awopt"><input type="checkbox" id="aw-${k}"${A[k] ? ' checked' : ''}>
+      <span><b>${esc(v.label)}</b>${esc(v.hint)}</span></label>`).join('')}
+    ${c ? (() => {
+      /* 軸とオプションに使う材料が空だと、書きようがない。先に言う。
          見学メモ（memo）だけでなく、案件データ側の項目（data）も見る */
-      const ang = ANGLES[A.angle] || {};
-      const miss = [
-        ...(ang.memo || []).filter(q => !filled(c.kengaku[q]))
+      const srcs = [ANGLES[A.angle] || {}, ...Object.entries(EXTRAS).filter(([k]) => A[k]).map(([, v]) => v)];
+      const miss = [...new Set(srcs.flatMap(s => [
+        ...(s.memo || []).filter(q => !filled(c.kengaku[q]))
           .map(q => (KENGAKU.find(x => x[1] === q) || [])[2]),
-        ...(ang.data || []).filter(([, ok]) => !ok(c)).map(([label]) => label),
-      ].filter(Boolean);
+        ...(s.data || []).filter(([, ok]) => !ok(c)).map(([label]) => label),
+      ]))].filter(Boolean);
       return miss.length
-        ? `<div class="banner warn" style="margin-top:12px">この軸で使う <b>${miss.map(esc).join('・')}</b> が未入力です。
-             その分、この軸の原稿は薄くなります。</div>`
+        ? `<div class="banner warn" style="margin-top:12px">ここで使う <b>${miss.map(esc).join('・')}</b> が未入力です。
+             その分、原稿は薄くなります。</div>`
         : '';
     })() : ''}
   </div>
