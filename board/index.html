@@ -5,6 +5,12 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <title>求人広告 運用ダッシュボード</title>
 
+<script>
+/* 保存されたテーマを、画面が描かれる前に反映する。保存先は案件管理システムと同じ */
+try { var t0 = localStorage.getItem('bring-theme') || 'light'; if (t0 === 'light' || t0 === 'dark') document.documentElement.setAttribute('data-theme', t0); }
+catch (e) { document.documentElement.setAttribute('data-theme', 'light'); }
+</script>
+
 <!-- 上の帯は案件管理システムと共通。行き来しても見た目が変わらないようにする -->
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -23,7 +29,7 @@
 <script src="./vendor/recharts.js"></script>
 
 <style>
-  html, body { margin: 0; background: #EEF1EE; }
+  html, body { margin: 0; background: var(--jad-bg); color: var(--jad-ink); }
   /* 上の帯を画面の幅いっぱいに出すため、中央寄せと余白は中身側（.jad-root の子）に移した */
   #root { margin: 0; padding: 0; }
   .jad-root > :not(.top):not(.bottomnav) { max-width: 1180px; margin-left: auto; margin-right: auto; padding-left: 16px; padding-right: 16px; }
@@ -35,7 +41,7 @@
 </head>
 <body>
 <div id="root">
-  <div style="padding:40px;text-align:center;font-family:sans-serif;color:#5C6660;">読み込み中…</div>
+  <div style="padding:40px;text-align:center;font-family:sans-serif;color:#77847F;">読み込み中…</div>
 </div>
 
 <script type="text/babel" data-presets="react">
@@ -1039,6 +1045,16 @@ function JobAdDashboard() {
   const selected = selectedJobId ? jobs[selectedJobId] : null;
   const selectedMetrics = selected ? deriveJobMetrics(selected) : null;
 
+  /* 表示テーマ。案件管理システムと同じ保存先（bring-theme）を読み書きするので、
+     どちらの画面で切り替えても、もう一方にも効く */
+  function themeNow() { try { return localStorage.getItem('bring-theme') || 'light'; } catch (e) { return 'light'; } }
+  function applyTheme(v) {
+    const root = document.documentElement;
+    if (v === 'light' || v === 'dark') root.setAttribute('data-theme', v); else root.removeAttribute('data-theme');
+    try { localStorage.setItem('bring-theme', v); } catch (e) { }
+  }
+  
+
   return (
     <div className="jad-root">
       {/* 上の帯は案件管理システムと共通（shell.css）。
@@ -1052,6 +1068,15 @@ function JobAdDashboard() {
             <span aria-current="page">成績ボード</span>
             <a href="../#/settings">設定</a>
           </nav>
+          <div className="me">
+            <label htmlFor="jad-theme" className="tlabel">表示</label>
+            <select id="jad-theme" defaultValue={themeNow()} onChange={(e) => applyTheme(e.target.value)}
+                    title="画面の明るさ（自動はお使いの端末の設定に合わせます）">
+              <option value="auto">自動</option>
+              <option value="light">ライト</option>
+              <option value="dark">ダーク</option>
+            </select>
+          </div>
         </div>
       </header>
       <nav className="bottomnav">
@@ -1510,7 +1535,35 @@ root.render(<JobAdDashboard />);
   --surface: #FFFFFF; --ink: #16201D; --ink-2: #4A5853; --ink-3: #77847F;
   --line: #D1D9D5; --accent: #224C74; --ok: #2A7549; --warn: #94600E; --r: 6px;
   --jad-brick: #B3261E; --jad-brick-soft: #FAE4E1; --jad-good: #2A7549; --jad-good-soft: #E1F0E6;
+  /* 濃い色の上に乗る文字と、注意の帯。ダークでは下地が反転するので名前にしておく */
+  --jad-on-strong: #FFFFFF; --jad-warn-soft: #FAEFD9; --jad-warn-ink: #8B6118;
+  color-scheme: light;
 }
+
+/* ダークモード。色は案件管理システム（index.html）のダークと同じ値にそろえてある。
+   「自動」のときは端末の設定に従い、「ライト」「ダーク」を選んだときはそれを優先する。
+   どちらを選んだかは案件管理と同じ localStorage（bring-theme）に入っている */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --jad-bg: #101615; --jad-surface: #19211F; --jad-ink: #E2E8E5; --jad-ink-soft: #A2AEA9;
+    --jad-border: #2E3A37; --jad-navy: #8FB4DB; --jad-navy-soft: #1D2D3E; --jad-gold: #DDAA4A;
+    --jad-brick: #EF6D61; --jad-brick-soft: #3A1916; --jad-good: #62BD88; --jad-good-soft: #18301F;
+    --jad-on-strong: #0E1A26; --jad-warn-soft: #33280F; --jad-warn-ink: #DDAA4A;
+    --surface: #19211F; --ink: #E2E8E5; --ink-2: #A2AEA9; --ink-3: #7C8984;
+    --line: #2E3A37; --accent: #8FB4DB; --ok: #62BD88; --warn: #DDAA4A;
+  }
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --jad-bg: #101615; --jad-surface: #19211F; --jad-ink: #E2E8E5; --jad-ink-soft: #A2AEA9;
+  --jad-border: #2E3A37; --jad-navy: #8FB4DB; --jad-navy-soft: #1D2D3E; --jad-gold: #DDAA4A;
+  --jad-brick: #EF6D61; --jad-brick-soft: #3A1916; --jad-good: #62BD88; --jad-good-soft: #18301F;
+  --jad-on-strong: #0E1A26; --jad-warn-soft: #33280F; --jad-warn-ink: #DDAA4A;
+  --surface: #19211F; --ink: #E2E8E5; --ink-2: #A2AEA9; --ink-3: #7C8984;
+  --line: #2E3A37; --accent: #8FB4DB; --ok: #62BD88; --warn: #DDAA4A;
+}
+
 /* 外部フォント(Google Fonts)への依存をなくし、OS標準フォントを使用しています */
 body { font-family: 'Noto Sans JP', sans-serif; color: var(--jad-ink); }
 .jad-root * { box-sizing: border-box; }
@@ -1522,7 +1575,7 @@ body { font-family: 'Noto Sans JP', sans-serif; color: var(--jad-ink); }
 .jad-header-title h1 { font-family: 'Zen Kaku Gothic New', sans-serif; font-size: 26px; margin: 2px 0 0; font-weight: 700; color: var(--jad-navy); }
 .jad-header-meta { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .jad-reminder { display: flex; align-items: center; gap: 6px; font-size: 14.5px; background: var(--jad-surface); border: 1px solid var(--jad-border); padding: 7px 12px; border-radius: 20px; color: var(--jad-ink-soft); }
-.jad-reminder.is-today { background: #FBF0DD; border-color: var(--jad-gold); color: #8B6118; font-weight: 600; }
+.jad-reminder.is-today { background: var(--jad-warn-soft); border-color: var(--jad-gold); color: var(--jad-warn-ink); font-weight: 600; }
 
 .jad-bulk-import { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; background: var(--jad-surface); border: 1px solid var(--jad-navy); border-radius: 8px; padding: 14px 16px; margin-bottom: 14px; }
 .jad-bulk-import > div { flex: 1 1 420px; }
@@ -1544,7 +1597,7 @@ body { font-family: 'Noto Sans JP', sans-serif; color: var(--jad-ink); }
 @media (max-width: 520px) { .jad-import-row { grid-template-columns: 1fr !important; } }
 .jad-branch-card { background: var(--jad-surface); border: 1px solid var(--jad-border); border-radius: 8px; padding: 12px 14px; display: flex; flex-direction: column; gap: 8px; }
 .jad-branch-name { font-family: 'Roboto Mono', monospace; font-weight: 500; font-size: 15px; color: var(--jad-navy); }
-.jad-import-btn { display: flex; align-items: center; justify-content: center; gap: 6px; background: var(--jad-navy); color: #fff; border: none; padding: 8px 10px; border-radius: 6px; font-size: 14.5px; cursor: pointer; font-weight: 600; }
+.jad-import-btn { display: flex; align-items: center; justify-content: center; gap: 6px; background: var(--jad-navy); color: var(--jad-on-strong); border: none; padding: 8px 10px; border-radius: 6px; font-size: 14.5px; cursor: pointer; font-weight: 600; }
 .jad-import-btn:hover { opacity: 0.9; }
 .jad-import-btn:disabled { opacity: 0.6; cursor: default; }
 .jad-branch-count { font-size: 13px; color: var(--jad-ink-soft); display: flex; align-items: center; gap: 8px; justify-content: space-between; }
@@ -1556,15 +1609,15 @@ body { font-family: 'Noto Sans JP', sans-serif; color: var(--jad-ink); }
 .jad-source-tabs { display: flex; gap: 6px; margin-bottom: 14px; }
 .jad-source-tab { display: inline-flex; align-items: center; gap: 6px; background: var(--jad-surface); border: 1px solid var(--jad-border); border-radius: 999px; padding: 7px 16px; font-size: 15px; font-weight: 500; color: var(--jad-ink-soft); cursor: pointer; font-family: 'Roboto Mono', monospace; }
 .jad-source-tab:hover { color: var(--jad-navy); border-color: var(--jad-navy); }
-.jad-source-tab.is-active { background: var(--jad-navy); border-color: var(--jad-navy); color: #fff; font-weight: 700; }
-.jad-source-tab.is-active .jad-tab-count { background: rgba(255,255,255,0.22); color: #fff; }
+.jad-source-tab.is-active { background: var(--jad-navy); border-color: var(--jad-navy); color: var(--jad-on-strong); font-weight: 700; }
+.jad-source-tab.is-active .jad-tab-count { background: color-mix(in srgb, var(--jad-on-strong) 22%, transparent); color: var(--jad-on-strong); }
 .jad-source-note { margin: -8px 0 16px; font-size: 13.5px; line-height: 1.7; color: var(--jad-ink-soft); background: var(--jad-navy-soft); border-radius: 6px; padding: 9px 12px; }
 .jad-tabs { display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 12px; border-bottom: 1px solid var(--jad-border); }
 .jad-tab { display: inline-flex; align-items: center; gap: 6px; background: transparent; border: none; border-bottom: 2px solid transparent; padding: 9px 14px; font-size: 15px; font-weight: 500; color: var(--jad-ink-soft); cursor: pointer; font-family: 'Roboto Mono', monospace; }
 .jad-tab:hover { color: var(--jad-navy); }
 .jad-tab.is-active { color: var(--jad-navy); border-bottom-color: var(--jad-navy); font-weight: 700; }
 .jad-tab-count { background: var(--jad-navy-soft); color: var(--jad-navy); font-size: 13px; padding: 1px 7px; border-radius: 10px; font-weight: 500; }
-.jad-tab.is-active .jad-tab-count { background: var(--jad-navy); color: #fff; }
+.jad-tab.is-active .jad-tab-count { background: var(--jad-navy); color: var(--jad-on-strong); }
 
 .jad-empty { background: var(--jad-surface); border: 1px dashed var(--jad-border); border-radius: 8px; padding: 30px; text-align: center; color: var(--jad-ink-soft); font-size: 15px; display: flex; align-items: center; justify-content: center; gap: 8px; }
 .jad-empty.small { padding: 16px; font-size: 14.5px; }
@@ -1578,7 +1631,7 @@ body { font-family: 'Noto Sans JP', sans-serif; color: var(--jad-ink); }
 .jad-sort-toggle { display: flex; border: 1px solid var(--jad-border); border-radius: 6px; overflow: hidden; }
 .jad-sort-toggle button { background: var(--jad-surface); border: none; padding: 8px 14px; font-size: 14.5px; color: var(--jad-ink-soft); cursor: pointer; font-family: 'Roboto Mono', monospace; }
 .jad-sort-toggle button + button { border-left: 1px solid var(--jad-border); }
-.jad-sort-toggle button.is-active { background: var(--jad-navy); color: #fff; font-weight: 600; }
+.jad-sort-toggle button.is-active { background: var(--jad-navy); color: var(--jad-on-strong); font-weight: 600; }
 
 .jad-table-wrap { background: var(--jad-surface); border: 1px solid var(--jad-border); border-radius: 8px; overflow: auto; }
 .jad-table { width: 100%; border-collapse: collapse; font-size: 14.5px; min-width: 800px; }
@@ -1586,15 +1639,15 @@ body { font-family: 'Noto Sans JP', sans-serif; color: var(--jad-ink); }
 .jad-table tbody tr { border-bottom: 1px solid var(--jad-border); cursor: pointer; }
 .jad-table tbody tr:hover { background: var(--jad-navy-soft); }
 .jad-table tbody tr.is-priority { background: var(--jad-brick-soft); }
-.jad-table tbody tr.is-priority:hover { background: #EFD3CB; }
+.jad-table tbody tr.is-priority:hover { background: var(--jad-brick-soft); }
 .jad-table td { padding: 9px 12px; vertical-align: middle; }
 .c-num, .c-date { font-family: 'Roboto Mono', monospace; text-align: right; white-space: nowrap; }
 .c-branch { font-family: 'Roboto Mono', monospace; color: var(--jad-navy); font-weight: 500; }
 .jad-job-name { font-weight: 600; max-width: 320px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .jad-job-sub { font-size: 13px; color: var(--jad-ink-soft); }
 .jad-rank-badge { display: inline-flex; align-items: center; justify-content: center; width: 24px; height: 24px; border-radius: 50%; font-family: 'Roboto Mono', monospace; font-weight: 500; font-size: 14.5px; }
-.jad-rank-badge.danger { background: var(--jad-brick); color: #fff; }
-.jad-rank-badge.warn { background: #EFDCB8; color: #7A5417; }
+.jad-rank-badge.danger { background: var(--jad-brick); color: var(--jad-on-strong); }
+.jad-rank-badge.warn { background: var(--jad-warn-soft); color: var(--jad-warn-ink); }
 .jad-rank-badge.ok { background: var(--jad-good-soft); color: var(--jad-good); }
 .jad-change { display: inline-flex; align-items: center; gap: 3px; }
 .jad-change.up { color: var(--jad-good); }
@@ -1613,9 +1666,9 @@ body { font-family: 'Noto Sans JP', sans-serif; color: var(--jad-ink); }
 .jad-ghost-btn:hover { border-color: var(--jad-navy); color: var(--jad-navy); }
 .jad-ghost-btn.danger { color: var(--jad-brick); }
 .jad-ghost-btn.danger:hover { border-color: var(--jad-brick); }
-.jad-primary-btn { display: inline-flex; align-items: center; gap: 6px; background: var(--jad-navy); color: #fff; border: none; padding: 8px 14px; border-radius: 6px; font-size: 14.5px; font-weight: 600; cursor: pointer; }
+.jad-primary-btn { display: inline-flex; align-items: center; gap: 6px; background: var(--jad-navy); color: var(--jad-on-strong); border: none; padding: 8px 14px; border-radius: 6px; font-size: 14.5px; font-weight: 600; cursor: pointer; }
 .jad-primary-btn:hover { opacity: 0.92; }
-.jad-danger-btn { background: var(--jad-brick); color: #fff; border: none; padding: 7px 14px; border-radius: 6px; font-size: 14.5px; cursor: pointer; font-weight: 600; }
+.jad-danger-btn { background: var(--jad-brick); color: var(--jad-on-strong); border: none; padding: 7px 14px; border-radius: 6px; font-size: 14.5px; cursor: pointer; font-weight: 600; }
 .jad-icon-btn { display: inline-flex; align-items: center; gap: 4px; background: transparent; border: none; color: var(--jad-ink-soft); cursor: pointer; font-size: 14.5px; padding: 4px; }
 .jad-icon-btn:hover { color: var(--jad-ink); }
 
@@ -1665,7 +1718,7 @@ body { font-family: 'Noto Sans JP', sans-serif; color: var(--jad-ink); }
 .jad-load-error-head { display: flex; align-items: center; gap: 7px; color: var(--jad-brick); font-weight: 700; font-size: 15px; margin-bottom: 10px; }
 .jad-load-error p { margin: 0 0 10px; font-size: 14.5px; line-height: 1.9; color: var(--jad-ink); }
 .jad-load-error-note { color: var(--jad-ink-soft) !important; font-size: 13.5px !important; }
-.jad-toast { position: fixed; bottom: 22px; left: 50%; transform: translateX(-50%); background: var(--jad-ink); color: #fff; padding: 10px 18px; border-radius: 24px; font-size: 14.5px; z-index: 60; box-shadow: 0 6px 18px rgba(0,0,0,0.2); max-width: min(720px, calc(100vw - 40px)); text-align: center; line-height: 1.8; }
+.jad-toast { position: fixed; bottom: 22px; left: 50%; transform: translateX(-50%); background: var(--jad-ink); color: var(--jad-on-strong); padding: 10px 18px; border-radius: 24px; font-size: 14.5px; z-index: 60; box-shadow: 0 6px 18px rgba(0,0,0,0.2); max-width: min(720px, calc(100vw - 40px)); text-align: center; line-height: 1.8; }
 .jad-toast.error { background: var(--jad-brick); }
 </style>
 </body>
