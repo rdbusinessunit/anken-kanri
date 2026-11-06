@@ -3,6 +3,8 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=BIZ+UDPGothic:wght@400;700&family=BIZ+UDPMincho:wght@400;700&display=swap">
+<!-- 上の帯・タブ・スマホの下タブ。成績ボードと共通にして、行き来しても見た目が変わらないようにする -->
+<link rel="stylesheet" href="./shell.css">
 <style>
 :root{
   --ground:#EDF0EE; --surface:#FFFFFF; --surface-2:#F5F7F6; --ink:#16201D; --ink-2:#4A5853; --ink-3:#77847F;
@@ -58,50 +60,10 @@ table.ptab td.n{white-space:nowrap}
 h1,h2,h3{text-wrap:balance;margin:0}
 
 /* ---- shell ---- */
-.top{position:sticky;top:0;z-index:30;background:var(--surface);border-bottom:1px solid var(--line);}
-.top-in{max-width:1320px;margin:0 auto;display:flex;align-items:center;gap:20px;padding:0 20px;height:56px}
-.brand{display:flex;align-items:baseline;gap:10px;white-space:nowrap}
-.brand b{font-family:var(--serif);font-size:22px;letter-spacing:.06em}
-.brand small{color:var(--ink-3);font-size:13px;letter-spacing:.12em}
-/* タブは縮ませない。縮むと日本語が1文字ずつ縦に折れて、別物の見た目になってしまう。
-   幅が足りないときは、代わりに右側の「入力者」などを縮める */
-.nav{display:flex;gap:2px;height:100%;flex:0 0 auto}
-.nav a{display:flex;align-items:center;padding:0 14px;text-decoration:none;color:var(--ink-2);border-bottom:2px solid transparent;font-weight:700;font-size:15px;white-space:nowrap}
-.nav a[aria-current="page"]{color:var(--ink);border-bottom-color:var(--accent)}
-.nav a:hover{color:var(--ink)}
-.me{margin-left:auto;display:flex;align-items:center;gap:10px;font-size:14.5px;color:var(--ink-2);white-space:nowrap;min-width:0}
-.me select{padding:4px 8px;border:1px solid var(--line);border-radius:var(--r);background:var(--surface);min-width:0}
-
-/* ページを切り替えたときに、縦スクロールバーの有無で画面全体が横にずれないようにする。
-   ずれると、上のタブが動いたように見える */
-html{scrollbar-gutter:stable}
-
-/* 求人まわりの画面の中の切り替え。上のタブの代わりにここで行き来する */
-.subnav{display:flex;gap:2px;margin:-4px 0 18px;border-bottom:1px solid var(--line);overflow-x:auto}
-.subnav a{padding:9px 15px;text-decoration:none;color:var(--ink-2);font-weight:700;font-size:15px;border-bottom:2px solid transparent;white-space:nowrap}
-.subnav a[aria-current="page"]{color:var(--ink);border-bottom-color:var(--accent)}
-.subnav a:hover{color:var(--ink)}
-.sync{display:inline-flex;align-items:center;gap:6px;font-size:13px;color:var(--ink-3)}
-.sync::before{content:"";width:7px;height:7px;border-radius:50%;background:var(--ink-3)}
-.sync.on::before{background:var(--ok)} .sync.local::before{background:var(--warn)}
+/* 上の帯・タブ・スマホの下タブは shell.css に移した。成績ボードと共通にするため。
+   ここを直しても成績ボードには効かない。両方に効かせたいときは shell.css を直すこと */
 .wrap{max-width:1320px;margin:0 auto;padding:24px 20px 120px}
-.bottomnav{display:none}
-/* ノートPCの幅ではタブと右側が競る。先に右側の飾りを落として、タブの幅を守る */
-@media (max-width:1150px){ .brand small,.me .sync,.me .tlabel{display:none} }
-@media (max-width:980px){ .me label[for="me"]{display:none} .me select#theme{display:none} }
-@media (max-width:760px){
-  .nav,.brand small,.me .sync,.me .tlabel,.me label[for="me"]{display:none}
-  .brand b{font-size:18px}
-  .me{gap:6px}
-  .me select{padding:4px 6px;font-size:14.5px;max-width:112px}
-  .top-in{padding:0 14px;gap:10px}
-  .wrap{padding:16px 12px 150px}
-  .bottomnav{display:flex;position:fixed;left:0;right:0;bottom:0;z-index:40;background:var(--surface);border-top:1px solid var(--line);padding-bottom:env(safe-area-inset-bottom)}
-  .bottomnav a{flex:1;text-align:center;padding:10px 0 8px;font-size:13px;font-weight:700;color:var(--ink-3);text-decoration:none}
-  .bottomnav a[aria-current="page"]{color:var(--accent)}
-  .bottomnav a b{display:block;font-size:15px;line-height:1.2}
-}
-
+@media (max-width:760px){ .wrap{padding:16px 12px 150px} }
 /* ---- primitives ---- */
 .btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;padding:7px 14px;border-radius:var(--r);border:1px solid var(--line);background:var(--surface);font-weight:700;font-size:15px;cursor:pointer;white-space:nowrap;text-decoration:none;color:var(--ink)}
 .btn:hover{border-color:var(--ink-3)}
@@ -558,7 +520,7 @@ try { var t0 = localStorage.getItem('bring-theme') || 'light'; if (t0 === 'light
 /* 画面の更新が利用者に届くようにする仕組み
    ・JavaScriptは5分ごとに新しいものを取りにいく
    ・version.json の版番号がこのページより新しければ、自動で読み直す */
-const APP_VERSION = "202611061007";
+const APP_VERSION = "202611061022";
 (function () {
   var files = ["config.js","ref.js","core.js","caseview.js","docs.js","postings.js","ads.js","adwrite.js","xlsxfill.js","main.js"];
   var q = "?v=" + Math.floor(Date.now() / 300000);
