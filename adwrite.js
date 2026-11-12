@@ -151,6 +151,24 @@ const AW_EMOJI = '✨ ✅';
 /* タイトルはエアワークの「職種名」欄に入れる。職種名だけさらに使えない記号がある */
 const AW_TITLE_NG = '「 」 ＜ ＞ 【 】 『 』 ［ ］ ＊ ／ ！ ＃ ￥ ☆ ★ ♪ ● ◎ ○ □ ■ ◇ ◆';
 
+/* 「タイトルがかたい・小難しい」と言われたときに付ける指定。
+   拠点のIndeed実績（表示300回以上の160件）を見たかぎりでは、
+   ・漢字が55%以上つまったタイトルはCTRの中央値が低い（5.2% / 全体5.7%）
+   ・「軽作業」「もくもく」「ひとりで」のような作業が想像できる言葉は高い
+   ・「未経験OK」「安心」「無理なく」といった決まり文句は効いていない
+   なので、やさしい言葉に置きかえるのではなく、具体的な作業の言葉にさせる */
+const SOFT_ORDER = `- タイトルとキャッチは、かたい言葉を避けてください。ここが最初に読まれる1行です
+- 漢字を詰めないこと。「製造補助作業員募集」のように漢字が4つ5つ続く書き方をしない。
+  「部品の組み立て」のように、漢字とひらがな・カタカナを混ぜて読み下せるようにする
+- 「〜業務」「〜作業員」「〜従事」「当社」「弊社」のような、会社側が使う言葉を使わない。
+  働く人が友だちに説明するときの言葉で書く
+- ただし検索で使われる職種の言葉（フォークリフト、検品、組立、ピッキング、溶接など）は
+  必ず残すこと。ここをやわらげると、そもそも検索結果に出てこなくなります
+- 「安心」「無理なく」「アットホーム」「未経験OK」だけでは、やわらかくなりません。
+  何がどうラクなのかを、作業の言葉で具体的に書いてください
+  （×「未経験でも安心の軽作業」→ ○「手のひらサイズの部品を、見て並べるだけ」）
+- 読む人が自分の1日を思い浮かべられる言葉を選ぶこと`;
+
 /* 媒体ごとの決まりごと。字数はエアワーク／求人ボックスの入力欄に合わせる */
 const MEDIA = {
   'Airワーク': { titleMax: 30, catchMax: 30,
@@ -231,7 +249,7 @@ const awState = () => (S.aw = S.aw || {
   kyoten: '', caseId: '', age: '', sex: '', attr: '', note: '', aim: 'ctr', angle: 'none',
   media: 'Airワーク', draft: '',
   exProduct: false, exProcess: false,
-  deco: 'none', narrow: false, lenOn: false, lenBody: 700, lenWant: 300,
+  deco: 'none', soft: false, narrow: false, lenOn: false, lenBody: 700, lenWant: 300,
 });
 
 /* プロンプトに入れる案件情報。JSONのままだと人が確認できないので、読める日本語にする */
@@ -330,6 +348,8 @@ function buildPrompt(c, o) {
   const M = MEDIA[o.media] || MEDIA['Airワーク'];
   const tops = topTitles(c);
   const deco = DECOS[o.deco] || DECOS.none;
+  /* 書き方の指定。記号のオプションと、やわらかい言いまわしは同時に使える */
+  const styleOrder = [deco.order, o.soft ? SOFT_ORDER : ''].filter(Boolean).join(EX_SEP);
   return `あなたは製造業・工場系の人材派遣会社で、求人広告を書くプロです。
 下の案件データをもとに、求人原稿を日本語で作ってください。
 
@@ -385,9 +405,9 @@ ${M.note}
 - ${AW_VARIANTS}案は番号つきの${AW_VARIANTS}行だけにしてください。
   「（1=時給、2=未経験…）」のような、どの案が何を狙ったかの説明は書かないこと。
   前置き・まとめ・感想も不要です。見出しと中身だけを出してください
-${deco.order ? `
+${styleOrder ? `
 # 書き方
-${deco.order}` : ''}${o.narrow ? `
+${styleOrder}` : ''}${o.narrow ? `
 
 # スマホで読むことを前提にする
 - 1行は全角20字以内で改行してください
@@ -524,6 +544,8 @@ function viewAdWrite() {
       貼り付けのときにも自動で取り除きます。
       タイトルは「職種名」欄なのでさらに厳しく、<b>☆ ★ ♪ ● ■ ◆ ！ 「」 【】</b> などが使えません。
       その指定はプロンプトに入れてあるので、「絵文字を中心に」を選んでも一覧の外は出てきません。</p>` : ''}
+    <label class="awopt"><input type="checkbox" id="aw-soft"${A.soft ? ' checked' : ''}>
+      <span><b>やわらかい言葉づかいにする</b>かたい・小難しいと言われるときに。タイトルとキャッチに効きます</span></label>
     <label class="awopt"><input type="checkbox" id="aw-narrow"${A.narrow ? ' checked' : ''}>
       <span><b>スマホ向けに1行を短くする</b>1行あたり全角20字以内で改行させます</span></label>
     <label class="awopt"><input type="checkbox" id="aw-lenOn"${A.lenOn ? ' checked' : ''}>
