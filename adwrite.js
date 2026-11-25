@@ -139,67 +139,36 @@ const EXTRAS = {
 /* オプションを2つONにしたとき、プロンプトの中で1行あけて並べるための区切り */
 const EX_SEP = '\n\n';
 
-/* エアワークで使える記号・絵文字。公式のヘルプに載っている一覧そのまま。
-   これ以外を入れるとIndeedおよびIndeed PLUS連携サイトで掲載されないことがある。
-   https://faq.rct.airwork.net/hc/ja/articles/23202281853977
-   一覧にない文字でいちばん事故が多いのがバックスラッシュ（\\ と ＼）。
-   日本語環境では ￥ として表示されるため、原稿の中で円マークに化けて見える。 */
-const AW_SYMBOLS = `？ ＆ ％ ＄ ・ ー ＝ ＠ （ ） ｛ ｝ ＋ － × ÷ ｜ ＾ ； ： ～ 〇 「 」 ＜ ＞ 【 】 『 』 ［ ］ ＊ ／ ！ ＃ ￥ 漢数字（一 二 三…）
-❶ ❷ ❸ ➀ ➁ ➂ ➊ ➋ ➌ ※ ▢ ✨ ✅ ☆ ★ ♪ ● ◎ ○ □ ■ ◇ ◆`;
-/* 絵文字として使えるのは実質この2つだけ。装飾オプションの案内にも出す */
-const AW_EMOJI = '✨ ✅';
-/* タイトルはエアワークの「職種名」欄に入れる。職種名だけさらに使えない記号がある */
-const AW_TITLE_NG = '「 」 ＜ ＞ 【 】 『 』 ［ ］ ＊ ／ ！ ＃ ￥ ☆ ★ ♪ ● ◎ ○ □ ■ ◇ ◆';
-
-/* 「タイトルがかたい・小難しい」と言われたときに付ける指定。
-   拠点のIndeed実績（表示300回以上の160件）を見たかぎりでは、
-   ・漢字が55%以上つまったタイトルはCTRの中央値が低い（5.2% / 全体5.7%）
-   ・「軽作業」「もくもく」「ひとりで」のような作業が想像できる言葉は高い
-   ・「未経験OK」「安心」「無理なく」といった決まり文句は効いていない
-   なので、やさしい言葉に置きかえるのではなく、具体的な作業の言葉にさせる */
-const SOFT_ORDER = `- タイトルとキャッチは、かたい言葉を避けてください。ここが最初に読まれる1行です
-- 漢字を詰めないこと。「製造補助作業員募集」のように漢字が4つ5つ続く書き方をしない。
-  「部品の組み立て」のように、漢字とひらがな・カタカナを混ぜて読み下せるようにする
-- 「〜業務」「〜作業員」「〜従事」「当社」「弊社」のような、会社側が使う言葉を使わない。
-  働く人が友だちに説明するときの言葉で書く
-- ただし検索で使われる職種の言葉（フォークリフト、検品、組立、ピッキング、溶接など）は
-  必ず残すこと。ここをやわらげると、そもそも検索結果に出てこなくなります
-- 「安心」「無理なく」「アットホーム」「未経験OK」だけでは、やわらかくなりません。
-  何がどうラクなのかを、作業の言葉で具体的に書いてください
-  （×「未経験でも安心の軽作業」→ ○「手のひらサイズの部品を、見て並べるだけ」）
-- 読む人が自分の1日を思い浮かべられる言葉を選ぶこと`;
-
 /* 媒体ごとの決まりごと。字数はエアワーク／求人ボックスの入力欄に合わせる */
 const MEDIA = {
   'Airワーク': { titleMax: 30, catchMax: 30,
     note: '- タイトルに雇用形態（派遣社員など）は入れない。職種と、いちばん強い条件で書く',
-    symbols: `エアワークは使える記号・絵文字が決まっています。**次の一覧にある文字だけ**を使ってください。
-${AW_SYMBOLS}
+    symbols: `上の「使ってよい記号」が最優先です。そのうえで、次のことを守ってください。
 
-- **バックスラッシュ（\\ と ＼）は絶対に書かないでください。**
+- **半角のバックスラッシュは絶対に書かないでください。**
   日本語環境では ￥ として表示されるため、原稿のあちこちが円マークに化けます。
-  ＼時給1,600円／ のような飾り枠も使わないこと（目立たせるなら ※ や ★ を行の頭に）
+  キャッチの「＼〇〇♪／」は全角の＼なので、こちらは使ってかまいません
 - **改行は、実際に改行して書いてください。**
-  \\n や <br> のような「改行を表す文字」を書かないこと。
+  改行を表す文字（エヌの前に半角バックスラッシュを付けたもの）や <br> を書かないこと。
   それを書くと、貼り付けたときに ￥n という文字として残ります
 - 出力を \`\`\` で囲んだり、JSONや表の形にしたりしないでください。そのまま貼れる文章で出すこと
-- 一覧にない絵文字（🎶 😊 ❤ ⁉ ❕ 🔰 🚗 など）は使わないこと。掲載されないか、文字化けします
-- 丸囲み数字の ① ② ③ や、㈱ ㊀ ⑴ ⒈ ℃ ㎏ のような組文字・環境依存文字も使えません
-  （番号を振るなら ❶ ❷ ❸ か ➀ ➁ ➂ を使ってください）
-- 上の「書き方」で絵文字を使う指示があっても、この一覧が優先です。
-  絵文字として使えるのは ${AW_EMOJI} の2つだけだと考えてください
-
-## タイトルはさらに厳しい（エアワークの「職種名」欄に入れるため）
-- タイトルでは、上の一覧のうち次の記号が使えません
-  ${AW_TITLE_NG}
-- タイトルで使える区切りは ｜ と ・ だけです
-- 絵文字（${AW_EMOJI}）もタイトルには入れないこと` },
+- 絵文字（🎶 😊 ❤ ⁉ ❕ 🔰 🚗 など）は使わないこと。掲載されないか、文字化けします
+- ㈱ ㊀ ⑴ ⒈ ℃ ㎏ のような組文字・環境依存文字は使えません` },
   '求人BOX': { titleMax: 40, catchMax: 30,
     note: '- 検索で使われる言葉（職種名・地名・こだわり条件）をタイトルに入れる' },
 };
 
 /* タイトルとキャッチは何案出させるか。短くて効きが大きいので、選べるようにする */
 const AW_VARIANTS = 5;
+
+/* キャッチの字数。媒体の上限は30字だが、型のほうが短いのでこちらを使う */
+const KATA_CATCH_MAX = 25;
+
+/* プロンプトの出しかた。同じAIの会話を使いまわすなら、型は最初の1回で足りる */
+const MODES = {
+  full: { label: '毎回まるごと', hint: '型も見本も入った1本。どのAIにもそのまま貼れます' },
+  learn: { label: '型を覚えさせる', hint: '最初に1回だけ型を貼り、2回目からは案件データだけ' },
+};
 
 /* 実際に編集するのはこの5つだけ。給与や勤務時間は媒体側の入力欄で設定するので原稿には書かせない。
    multi が付いた項目は複数案を出させて、1案ずつコピーできるようにする */
@@ -210,25 +179,6 @@ const AW_FIELDS = [
   { key: 'want', label: '求める人材', max: () => 0, len: o => o.lenWant },
   { key: 'env', label: '職場環境', max: () => 0 },
 ];
-
-/* 書き方のオプション。媒体やペルソナでは決まらない「見た目の好み」をここで選ぶ */
-const DECOS = {
-  none: { label: '指定しない', hint: 'AIにまかせます', order: '' },
-  emoji: {
-    label: '絵文字を中心に', hint: 'スマホの一覧で目を引きます',
-    order: `- 絵文字を積極的に使ってください。見出しや箇条書きの先頭に置きます
-- ただし1行に2つまで。並べすぎると読みにくくなります
-- 仕事内容・条件に関係する絵文字を選ぶこと（意味のない飾りは入れない）
-- 媒体で使える文字が決まっている場合は、その一覧にあるものだけを使うこと。
-  使える絵文字が足りないときは、記号（★ ◆ ■ ✨ ✅）で代わりに目立たせてください`,
-  },
-  mark: {
-    label: '記号を中心に', hint: '固くなりすぎず、読みやすく整います',
-    order: `- 絵文字は使わないでください
-- 代わりに記号（■ ◆ ◎ ｜ ★ ※）で区切り、項目の頭に置いて整理します
-- 箇条書きは「・」でそろえること`,
-  },
-};
 
 /* 同じ拠点で実際にクリック率が高かったタイトル。成績の裏づけがある手本として渡す */
 function topTitles(c, n = 6) {
@@ -249,7 +199,7 @@ const awState = () => (S.aw = S.aw || {
   kyoten: '', caseId: '', age: '', sex: '', attr: '', note: '', aim: 'ctr', angle: 'none',
   media: 'Airワーク', draft: '',
   exProduct: false, exProcess: false,
-  deco: 'none', soft: false, narrow: false, lenOn: false, lenBody: 700, lenWant: 300,
+  mode: 'full', lenOn: false, lenBody: 700, lenWant: 300,
 });
 
 /* プロンプトに入れる案件情報。JSONのままだと人が確認できないので、読める日本語にする */
@@ -338,6 +288,45 @@ function briefText(c) {
   return L.join('\n');
 }
 
+/* 型と見本のかたまり。まるごとモードでは毎回、学習モードでは最初の1回だけ入る */
+function kataBlock() {
+  return `# 書き方の型（社内で応募が多く入っている書き方です。ここが最優先）
+
+## 全項目に共通すること
+${KATA_RULES}
+
+## 項目ごとの書き方
+${KATA_FIELDS}
+
+## 使ってよい記号
+${KATA_MARKS}
+
+## 見本（書き方・言葉づかい・リズムだけをまねる。内容はまねない）
+${KATA_SAMPLES}`;
+}
+
+/* 「型を覚えさせる」モードで、最初に1回だけ貼る文章。
+   同じ会話を使いまわすあいだ、2回目からは案件データだけで済む */
+function buildLearn() {
+  return `これから、当社の求人原稿の「書き方の型」を覚えてもらいます。
+この会話では、以後ずっとこの型で求人原稿を書いてください。
+
+# 前提
+- 当社：株式会社bring plus（茨城・千葉の製造業向け人材派遣）
+- 媒体：エアワーク（Indeed・求人ボックスに配信）
+- 読み手：工場で働いたことがない人、ブランクがある人、主婦の方など、幅広い求職者
+- 目的：スマホで読んで「自分にもできそう」と思い、応募してもらうこと
+
+${kataBlock()}
+
+# 最初にやってほしいこと
+まだ原稿は書かないでください。
+1. 見本から読み取った書き方の特徴を、10個以内の箇条書きで返してください
+2. 上の型と見本でずれている点や、わかりにくい点があれば質問してください
+3. 私が「OK」と言ったら覚えたことにしてください。
+   そのあと案件データを渡すので、そこからはこの型で原稿を書いてください`;
+}
+
 function buildPrompt(c, o) {
   const aim = AIMS[o.aim] || AIMS.ctr;
   const ang = ANGLES[o.angle] || ANGLES.none;
@@ -347,11 +336,16 @@ function buildPrompt(c, o) {
   const prev = o.aim === 'repost' && c.jobAd && c.jobAd.text ? c.jobAd.text : '';
   const M = MEDIA[o.media] || MEDIA['Airワーク'];
   const tops = topTitles(c);
-  const deco = DECOS[o.deco] || DECOS.none;
-  /* 書き方の指定。記号のオプションと、やわらかい言いまわしは同時に使える */
-  const styleOrder = [deco.order, o.soft ? SOFT_ORDER : ''].filter(Boolean).join(EX_SEP);
-  return `あなたは製造業・工場系の人材派遣会社で、求人広告を書くプロです。
-下の案件データをもとに、求人原稿を日本語で作ってください。
+  /* 学習モードでは、型と見本はもう相手が覚えている。ここでは繰り返さない */
+  const learned = o.mode === 'learn';
+  /* キャッチは型のほうが短い。媒体の上限より型を優先する */
+  const catchMax = Math.min(M.catchMax, KATA_CATCH_MAX);
+  return `${learned
+    ? `さきほど覚えてもらった「書き方の型」と見本のとおりに、
+いちばん下の案件データから求人原稿を1件作ってください。型は変えないでください。`
+    : `あなたは、茨城・千葉の製造業向け人材派遣会社「株式会社bring plus」の求人原稿ライターです。
+エアワーク（Indeed・求人ボックスに配信）に載せる派遣社員の求人原稿を書きます。
+下の「書き方の型」と見本のとおりに、いちばん下の案件データから原稿を1件作ってください。`}
 
 # 誰に向けて書くか
 ${persona.length ? persona.join('・') : '特定の層にしぼらない'}${o.note ? `\n${o.note}` : ''}
@@ -369,10 +363,11 @@ ${ang.order}
 ` : ''}${exOn.length ? `
 # 必ず入れる説明
 押す軸とは別に、次の説明を【求人内容】のなかに必ず入れてください。
-字数の指定があるときは、ほかを削ってでもこの説明を入れ、指定の字数に収めること。
 
 ${exOn.map(x => x.order).join(EX_SEP)}
-` : ''}
+` : ''}${learned ? '' : `
+${kataBlock()}
+`}
 # 出力の形（ここが大事です）
 次の5つだけを、この見出しのまま、この順で出力してください。ほかの項目は書かないでください。
 
@@ -380,7 +375,7 @@ ${exOn.map(x => x.order).join(EX_SEP)}
 （全角${M.titleMax}字以内。${AW_VARIANTS}案を「1. 」から始まる番号つきで1行ずつ）
 
 【求人キャッチコピー】
-（全角${M.catchMax}字以内。${AW_VARIANTS}案を「1. 」から始まる番号つきで1行ずつ）
+（全角${catchMax}字以内。${AW_VARIANTS}案を「1. 」から始まる番号つきで1行ずつ）
 
 【求人内容】
 ${o.lenOn ? `（全角${o.lenBody}字ちょうどを目指す。前後20字までのずれは可）` : ''}
@@ -388,13 +383,18 @@ ${o.lenOn ? `（全角${o.lenBody}字ちょうどを目指す。前後20字ま�
 ${o.lenOn ? `（全角${o.lenWant}字程度）` : ''}
 【職場環境】
 
-給与・勤務時間・休日・勤務地・待遇・応募資格は、媒体の入力欄で別に設定します。
-**見出しとしては書かないでください。** ただし求人内容を書くときの材料としては使ってください。
+給与・給与例・勤務時間・休日休暇・アクセス・社会保険・選考プロセス・問い合わせ先は、
+エアワークの入力欄で別に設定します。**見出しとしては書かないでください。**
+ただし求人内容を書くときの材料としては使ってください。
 
 # 守ること
 ${M.note}
-- 案件データにない条件（時給・手当・休日・待遇）は絶対に作らないこと
+- 案件データにない条件（時給・手当・休日・寮・送迎・研修・設備）は絶対に作らないこと。
+  分からないところは【要確認】と書いてください
+- 時給・月収例・勤務時間・交替の有無・寮費は、どの項目でも同じ値にすること
+- 月収例を書くときは「時給×時間×日数」の式で計算し、検算してから書くこと
 - 「アットホームな職場」「やりがい」のような、どの求人にも書ける言葉は使わない
+- 見本の書き方はまねる。見本の内容（仕事・条件・設備）は使わない。ほかの求人の文章も混ぜない
 - 字数は必ず守ること。超えたら削って収める
 - タイトルとキャッチの${AW_VARIANTS}案は、言い回しを変えただけのものにしないこと。
   ${ang.order
@@ -405,31 +405,22 @@ ${M.note}
 - ${AW_VARIANTS}案は番号つきの${AW_VARIANTS}行だけにしてください。
   「（1=時給、2=未経験…）」のような、どの案が何を狙ったかの説明は書かないこと。
   前置き・まとめ・感想も不要です。見出しと中身だけを出してください
-${styleOrder ? `
-# 書き方
-${styleOrder}` : ''}${o.narrow ? `
-
-# スマホで読むことを前提にする
-- 1行は全角20字以内で改行してください
-- 長い文は途中で切って2行にする。読点のあとで改行すると読みやすくなります
-- スマホの画面では1行が長いと読み飛ばされます` : ''}
 ${M.symbols ? `
-# 使える記号・絵文字（媒体の決まり。ここが最優先です）
+# 貼り付けで事故らないために（媒体の決まり）
 ${M.symbols}` : ''}
 ${prev ? `
 # 前回の原稿（これと重ならないように）
 ${prev}
 ` : ''}
 ${tops.length ? `
-# 同じ拠点で実際にクリック率が高かったタイトル（手本）
-数字は実績です。言い回しの型と、どこを押すと反応があるかの参考にしてください。真似ではなく傾向をつかむこと。
-記号の使い方は真似しないでください（古い書き方が混ざっています）。使える記号は上の指定が優先です。
+# 同じ拠点で実際にクリック率が高かったタイトル（参考）
+数字は実績です。どこを押すと反応があるかの参考にしてください。真似ではなく傾向をつかむこと。
+書き方そのものは、上の型と見本のほうが優先です。
 ${tops.map(x => `・${x.title}（CTR ${pct(x.ctr)}・表示${x.imp.toLocaleString()}）`).join('\n')}
 ` : ''}
 # 案件データ
 ${briefText(c)}`;
 }
-
 /* 案件は数百件あるので、拠点で絞ってから選ぶ。拠点ごとの件数も出す */
 function awCaseList(kyoten) {
   return Object.values(S.cases).map(normalizeCase)
@@ -460,10 +451,12 @@ function viewAdWrite() {
     `<label class="aim${A.angle === k ? ' on' : ''}"><input type="radio" name="aw-angle" value="${k}"${A.angle === k ? ' checked' : ''}>
       <b>${esc(v.label)}</b><span>${esc(v.hint)}</span></label>`).join('');
 
-  const decoBtns = Object.entries(DECOS).map(([k, v]) =>
-    `<label class="aim${A.deco === k ? ' on' : ''}"><input type="radio" name="aw-deco" value="${k}"${A.deco === k ? ' checked' : ''}>
+  const modeBtns = Object.entries(MODES).map(([k, v]) =>
+    `<label class="aim${A.mode === k ? ' on' : ''}"><input type="radio" name="aw-mode" value="${k}"${A.mode === k ? ' checked' : ''}>
       <b>${esc(v.label)}</b><span>${esc(v.hint)}</span></label>`).join('');
   const prompt = c ? buildPrompt(c, A) : '';
+  /* 学習モードのときだけ、最初に1回貼る文章も作る */
+  const learn = c && A.mode === 'learn' ? buildLearn() : '';
   const M = MEDIA[A.media] || MEDIA['Airワーク'];
   const fields = A.fields || null;
   const missing = c ? [
@@ -535,19 +528,13 @@ function viewAdWrite() {
   </div>
 
   <div class="panel">
-    <h3>5. 書き方（任意）</h3>
-    <p>決めなくても作れます。見た目の好みや、媒体の都合に合わせたいときだけ使ってください。</p>
-    <div class="aims" style="margin-bottom:10px">${decoBtns}</div>
-    ${M.symbols ? `<p style="margin:0 0 14px;font-size:13px;line-height:1.8;color:var(--ink-3)">
-      ${esc(A.media)}は使える記号・絵文字が決まっています（絵文字は <b>${esc(AW_EMOJI)}</b> だけ。① ② ③ や 🎶 😊 は不可）。
-      <b>バックスラッシュ（\ ＼）は書かせません</b>（日本語環境では ￥ として表示されるため）。
-      貼り付けのときにも自動で取り除きます。
-      タイトルは「職種名」欄なのでさらに厳しく、<b>☆ ★ ♪ ● ■ ◆ ！ 「」 【】</b> などが使えません。
-      その指定はプロンプトに入れてあるので、「絵文字を中心に」を選んでも一覧の外は出てきません。</p>` : ''}
-    <label class="awopt"><input type="checkbox" id="aw-soft"${A.soft ? ' checked' : ''}>
-      <span><b>やわらかい言葉づかいにする</b>かたい・小難しいと言われるときに。タイトルとキャッチに効きます</span></label>
-    <label class="awopt"><input type="checkbox" id="aw-narrow"${A.narrow ? ' checked' : ''}>
-      <span><b>スマホ向けに1行を短くする</b>1行あたり全角20字以内で改行させます</span></label>
+    <h3>5. 書き方</h3>
+    <p>書き方は、社内で応募が多く入っている型に固定してあります。
+      職種名は「売り｜やさしい言葉の仕事内容｜条件」、キャッチは「＼〇〇♪／＋一言」、
+      求人内容は心の声 → 3ステップ → 時間・休日 → 研修 → 待遇 → 締めの問いかけ、の順です。</p>
+    <p class="small muted">本文で使う記号は <b>♪ ◎ ！ ＼ ／ ◆ ★ ● ① ② ③ ━</b> だけ。絵文字は使いません。
+      タイトルはエアワークの「職種名」欄なので記号がさらに厳しく、<b>｜ と ・</b> だけにしています。
+      型と見本を直したいときは kata.js を編集してください。</p>
     <label class="awopt"><input type="checkbox" id="aw-lenOn"${A.lenOn ? ' checked' : ''}>
       <span><b>文字数の目安を指定する</b>長さがばらつくときに使います</span></label>
     ${A.lenOn ? `<div class="fg" style="margin-top:4px">
@@ -560,12 +547,26 @@ function viewAdWrite() {
   </div>
 
   <div class="panel">
-    <div class="row"><h3 style="margin:0">6. この文章をAIに貼ってください</h3><span class="spacer"></span>
-      <button class="btn primary" data-act="awcopy"${c ? '' : ' disabled'}>プロンプトをコピー</button></div>
-    ${c ? `<p>ジェンスパーク・Claude・ChatGPTなど、お使いのAIの入力欄に貼り付けてください。</p>
+    <h3>6. この文章をAIに貼ってください</h3>
+    <p>ジェンスパーク・Claude・ChatGPTなど、お使いのAIの入力欄に貼り付けてください。</p>
+    <div class="aims" style="margin-bottom:14px">${modeBtns}</div>
+    ${!c ? '<p class="small muted">上で案件を選ぶと、ここに貼り付ける文章が出ます。</p>'
+      : A.mode === 'learn' ? `
+      <div class="row"><b>① 最初に1回だけ貼る（型を覚えさせる）</b><span class="spacer"></span>
+        <button class="btn" data-act="awcopy" data-k="aw-learn">①をコピー</button></div>
+      <p class="small muted">AIが「覚えました」と答えるのを待ってから、②を貼ってください。
+        同じ会話を使いつづけるあいだ、①はもう貼らなくて大丈夫です。</p>
+      <pre class="prompt" id="aw-learn">${esc(learn)}</pre>
+      <p class="small muted">${learn.length.toLocaleString()}文字</p>
+      <div class="row" style="margin-top:20px"><b>② 案件ごとに貼る</b><span class="spacer"></span>
+        <button class="btn primary" data-act="awcopy" data-k="aw-prompt">②をコピー</button></div>
       <pre class="prompt" id="aw-prompt">${esc(prompt)}</pre>
       <p class="small muted">${prompt.length.toLocaleString()}文字</p>`
-      : '<p class="small muted">上で案件を選ぶと、ここに貼り付ける文章が出ます。</p>'}
+      : `
+      <div class="row"><span class="spacer"></span>
+        <button class="btn primary" data-act="awcopy" data-k="aw-prompt">プロンプトをコピー</button></div>
+      <pre class="prompt" id="aw-prompt">${esc(prompt)}</pre>
+      <p class="small muted">${prompt.length.toLocaleString()}文字</p>`}
   </div>
 
   ${c ? `<div class="panel">
@@ -636,22 +637,27 @@ function fieldBoxHTML(fd, v, M) {
 }
 
 /* AIの答えを項目ごとに切り分ける。見出しの表記ゆれ（全角カッコ・■・#）も拾う */
-/* AIの答えをそのまま貼ると、改行が \n という2文字のまま残っていることがある。
-   バックスラッシュは日本語環境で ￥ として表示されるので、貼った先で ￥n に化けて見える。
-   振り分ける前にここで直す。何を直したかは呼び出し側で知らせる。 */
+/* AIの答えをそのまま貼ると、改行が「半角バックスラッシュ＋n」の2文字のまま残ることがある。
+   半角バックスラッシュは日本語環境で ￥ として表示されるので、貼った先で ￥n に化けて見える。
+   振り分ける前にここで直す。
+   全角の＼（＼〇〇♪／ の飾り）は社内の型で使うものなので、消さずに残す。 */
 /* 正規表現の中では \ 自身を2つ重ねる。1つだと次の文字をエスケープしてしまう */
 const BS1 = String.fromCharCode(0x5C), BS2 = BS1 + BS1;
-const BSLASH = new RegExp('[' + BS2 + String.fromCharCode(0xFF3C) + ']', 'g');
+const BSLASH = new RegExp(BS2, 'g');
+/* 消さずに、数えて知らせるだけの文字。エアワークの公式一覧には載っていないが、
+   社内の型では使っている。掲載されない事故が起きたときの手がかりにする */
+const AW_WATCH = [['全角の＼', /＼/g], ['丸囲み数字', /[\u2460-\u2473]/g], ['横線の━', /━/g]];
 function awClean(text) {
   let s = String(text).replace(/\r\n?/g, '\n');
   const fixed = [];
   if (/```/.test(s)) { s = s.replace(/```[a-zA-Z]*\n?/g, ''); fixed.push('コードの囲み'); }
   if (/<br\s*\/?>/i.test(s)) { s = s.replace(/<br\s*\/?>/gi, '\n'); fixed.push('<br>'); }
-  const esc = new RegExp(BS2 + '[nt]', 'g');
-  if (esc.test(s)) { s = s.replace(esc, m => (m[1] === 'n' ? '\n' : ' ')); fixed.push('文字のままの改行'); }
+  const escSeq = new RegExp(BS2 + '[nt]', 'g');
+  if (escSeq.test(s)) { s = s.replace(escSeq, m => (m[1] === 'n' ? '\n' : ' ')); fixed.push('文字のままの改行'); }
   BSLASH.lastIndex = 0;
-  if (BSLASH.test(s)) { s = s.replace(BSLASH, ''); fixed.push('￥に化ける記号'); }
-  return { text: s, fixed };
+  if (BSLASH.test(s)) { s = s.replace(BSLASH, ''); fixed.push('￥に化ける半角記号'); }
+  const watch = AW_WATCH.map(([label, re]) => [label, (s.match(re) || []).length]).filter(([, n]) => n > 0);
+  return { text: s, fixed, watch };
 }
 
 function awSplit(text) {
@@ -670,8 +676,8 @@ function awSplit(text) {
 /* 画面で選んだ内容を控える。選ぶたびに作り直すので保存ボタンは要らない */
 function awSet(k, v) { awState()[k] = v; rerender(); }
 
-async function awCopy() {
-  const el = $('#aw-prompt'); if (!el) return;
+async function awCopy(id) {
+  const el = $('#' + (id || 'aw-prompt')); if (!el) return;
   try {
     await navigator.clipboard.writeText(el.textContent);
     toast('コピーしました。AIの入力欄に貼り付けてください');
@@ -713,7 +719,7 @@ function awChange(el) {
 document.addEventListener('change', (e) => {
   if (e.target.name === 'aw-aim') { awState().aim = e.target.value; rerender(); }
   if (e.target.name === 'aw-angle') { awState().angle = e.target.value; rerender(); }
-  if (e.target.name === 'aw-deco') { awState().deco = e.target.value; rerender(); }
+  if (e.target.name === 'aw-mode') { awState().mode = e.target.value; rerender(); }
 });
 
 /* 貼られた文章を項目ごとに振り分ける */
@@ -728,6 +734,8 @@ function awDoSplit() {
   const miss = AW_FIELDS.filter(x => !f[x.key]).map(x => x.label);
   rerender();
   if (cleaned.fixed.length) toast(`${cleaned.fixed.join('・')}を直しました`, 'warn');
+  /* 消してはいないが、エアワークの公式一覧に無い文字。掲載されないときの手がかりに出す */
+  if (cleaned.watch.length) toast(`${cleaned.watch.map(([k, n]) => `${k}${n}個`).join('・')}（そのままにしてあります）`);
   toast(miss.length ? `振り分けました。${miss.join('・')}が見つかりません` : `${AW_FIELDS.length}項目に振り分けました`);
 }
 
