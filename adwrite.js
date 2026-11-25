@@ -11,9 +11,7 @@
  * どのAIを使うかは現場で変わるため。ここではプロンプトを作ってコピーするところまでやる。
  */
 
-const PERSONA_AGES = ['10代', '20代', '30代', '40代', '50代', '60代以上', '年代は問わない'];
-const PERSONA_SEX = ['男性', '女性', '男女問わず'];
-const PERSONA_ATTR = ['独身', '既婚', '問わない'];
+/* ペルソナは一覧表（2000件）から1人選ぶ。絞り込みと案件との照合は persona.js */
 
 /* 方向性ごとに、AIへの指示を変える。ここが原稿の性格を決める */
 const AIMS = {
@@ -196,7 +194,9 @@ function topTitles(c, n = 6) {
 }
 
 const awState = () => (S.aw = S.aw || {
-  kyoten: '', caseId: '', age: '', sex: '', attr: '', note: '', aim: 'ctr', angle: 'none',
+  kyoten: '', caseId: '', note: '', aim: 'ctr', angle: 'none',
+  /* ペルソナ。pid が選んだ1人、pf が絞り込み、psort が並び順、pshow が出している人数 */
+  pid: '', pf: { type: '', gen: '', fam: '', work: '', q: '' }, psort: 'fit', pshow: 12,
   media: 'Airワーク', draft: '',
   exProduct: false, exProcess: false,
   mode: 'full', lenOn: false, lenBody: 700, lenWant: 300,
@@ -332,7 +332,8 @@ function buildPrompt(c, o) {
   const ang = ANGLES[o.angle] || ANGLES.none;
   /* ONにされたオプション。軸と違って何個でも足せる */
   const exOn = Object.entries(EXTRAS).filter(([k]) => o[k]).map(([, v]) => v);
-  const persona = [o.age, o.sex, o.attr].filter(x => x && x !== '年代は問わない' && x !== '男女問わず' && x !== '問わない');
+  /* 選んだペルソナ1人。選んでいなければ personaPrompt が「しぼらない」書き方を返す */
+  const pRow = o.pid ? personaById(o.pid) : null;
   const prev = o.aim === 'repost' && c.jobAd && c.jobAd.text ? c.jobAd.text : '';
   const M = MEDIA[o.media] || MEDIA['Airワーク'];
   const tops = topTitles(c);
@@ -348,8 +349,7 @@ function buildPrompt(c, o) {
 下の「書き方の型」と見本のとおりに、いちばん下の案件データから原稿を1件作ってください。`}
 
 # 誰に向けて書くか
-${persona.length ? persona.join('・') : '特定の層にしぼらない'}${o.note ? `\n${o.note}` : ''}
-この人が検索しているときの気持ち、迷う理由、決め手になるものを想像して書いてください。
+${personaPrompt(pRow, o.note)}
 
 # 今回のねらい
 ${aim.label}
@@ -431,6 +431,9 @@ const awLabel = x => `${caseName(x)}｜${x.kyoten || '拠点未設定'}`;
 
 function viewAdWrite() {
   const A = awState();
+  /* ペルソナ一覧は重いので、この画面を開いたときに初めて読む。
+     読み終わると loadPersonas が画面を作り直す */
+  loadPersonas();
   const all = Object.values(S.cases).map(normalizeCase);
   const kyoN = id => all.filter(x => (x.kyoten || '') === id).length;
   const kyoOpts = cfg().kyotens.map(k => k.id).filter(k => kyoN(k))
@@ -488,15 +491,12 @@ function viewAdWrite() {
 
   <div class="panel">
     <h3>2. 誰に向けた求人ですか</h3>
-    <p>この人が検索しているときの気持ちを想像して書くよう、AIに指示します。</p>
-    <div class="fg">
-      <div class="f"><label for="aw-age">年代</label>${sel('aw-age', PERSONA_AGES, A.age, '選ぶ')}</div>
-      <div class="f"><label for="aw-sex">性別</label>${sel('aw-sex', PERSONA_SEX, A.sex, '選ぶ')}</div>
-      <div class="f"><label for="aw-attr">属性</label>${sel('aw-attr', PERSONA_ATTR, A.attr, '選ぶ')}</div>
-    </div>
-    <div class="f" style="margin-top:8px"><label for="aw-note">補足（任意）</label>
+    <p>一覧表の2000人から1人選びます。この人ひとりに向けて書くよう、AIに指示します。
+      選ばなくても原稿は作れますが、刺さり方は落ちます。</p>
+    ${personaPanel(c, A)}
+    <div class="f" style="margin-top:14px"><label for="aw-note">補足（任意）</label>
       <input class="inp" id="aw-note" value="${esc(A.note)}" placeholder="例：子どもの送迎があるので9時すぎ出勤を探している">
-      <small>ペルソナの事情を一言書いておくと、原稿の説得力が変わります</small></div>
+      <small>一覧にない事情を一言書いておくと、原稿の説得力が変わります</small></div>
   </div>
 
   <div class="panel">
@@ -710,7 +710,11 @@ function awChange(el) {
     A.caseId = hit ? hit.id : '';
     A.draft = ''; A.fields = null;
   } else if (el.id === 'aw-draft') { A.draft = el.value; return; }
-  else if (el.type === 'checkbox') A[el.id.slice(3)] = el.checked;
+  else if (el.id.startsWith('aw-pf-')) {
+    /* ペルソナの絞り込み。条件を変えたら、出す人数は最初に戻す */
+    A.pf[el.id.slice(6)] = el.value;
+    A.pshow = 12;
+  } else if (el.type === 'checkbox') A[el.id.slice(3)] = el.checked;
   else if (el.type === 'number') A[el.id.slice(3)] = Math.max(1, +el.value || 0);
   else A[el.id.slice(3)] = el.value;
   rerender();
@@ -720,6 +724,7 @@ document.addEventListener('change', (e) => {
   if (e.target.name === 'aw-aim') { awState().aim = e.target.value; rerender(); }
   if (e.target.name === 'aw-angle') { awState().angle = e.target.value; rerender(); }
   if (e.target.name === 'aw-mode') { awState().mode = e.target.value; rerender(); }
+  if (e.target.name === 'aw-pid') { awState().pid = e.target.value; rerender(); }
 });
 
 /* 貼られた文章を項目ごとに振り分ける */

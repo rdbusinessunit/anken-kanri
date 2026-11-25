@@ -119,6 +119,8 @@ document.addEventListener('input', e => {
   if (t.id === 'reason') { S.reason = t.value; return; }
   if (t.dataset.adf === 'q') { S.adf.q = t.value; clearTimeout(S._aq); S._aq = setTimeout(() => { rerender(); const q = $('[data-adf="q"]'); if (q) { q.focus(); q.setSelectionRange(q.value.length, q.value.length); } }, 250); return; }
   if (t.dataset.filter === 'q') { S.filters.q = t.value; clearTimeout(S._qt); S._qt = setTimeout(() => { rerender(); const q = $('[data-filter="q"]'); if (q) { q.focus(); q.setSelectionRange(q.value.length, q.value.length); } }, 250); return; }
+  /* ペルソナを言葉で探す欄。打つたびに作り直すと重いので、少し待ってから */
+  if (t.dataset.pq !== undefined) { const A = awState(); A.pf.q = t.value; A.pshow = 12; clearTimeout(S._pq); S._pq = setTimeout(() => { rerender(); const q = $('[data-pq]'); if (q) { q.focus(); q.setSelectionRange(q.value.length, q.value.length); } }, 250); return; }
   if (t.dataset.p !== undefined && S.draft && t.type !== 'checkbox' && t.type !== 'radio' && t.tagName !== 'SELECT') applyInput(t);
 });
 document.addEventListener('change', e => {
@@ -266,6 +268,10 @@ const ACT = {
   awcopyf: (b) => awCopyField(b.dataset.k),
   awcopyv: (b) => awCopyVariant(b.dataset.k, b.dataset.i),
   awsave: () => awSave(),
+  /* ペルソナ選び */
+  awpclear: () => { awState().pid = ''; rerender(); },
+  awpsort: (b) => { awState().psort = b.dataset.v; awState().pshow = 12; rerender(); },
+  awpmore: () => { const A = awState(); A.pshow = (A.pshow || 12) + 24; rerender(); },
   kbnamesave: () => kbNameSave(),
   adsort(b) { S.adf.sort = b.dataset.v; rerender(); },
   adst(b) { S.adf.st = b.dataset.v; rerender(); },

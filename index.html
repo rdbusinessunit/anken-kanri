@@ -520,9 +520,9 @@ try { var t0 = localStorage.getItem('bring-theme') || 'light'; if (t0 === 'light
 /* 画面の更新が利用者に届くようにする仕組み
    ・JavaScriptは5分ごとに新しいものを取りにいく
    ・version.json の版番号がこのページより新しければ、自動で読み直す */
-const APP_VERSION = "202611251051";
+const APP_VERSION = "202611251459";
 (function () {
-  var files = ["config.js","ref.js","core.js","caseview.js","docs.js","postings.js","ads.js","kata.js","adwrite.js","xlsxfill.js","main.js"];
+  var files = ["config.js","ref.js","core.js","caseview.js","docs.js","postings.js","ads.js","kata.js","persona.js","adwrite.js","xlsxfill.js","main.js"];
   var q = "?v=" + Math.floor(Date.now() / 300000);
   files.forEach(function (f) {
     var el = document.createElement("script");
